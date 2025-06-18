@@ -35,7 +35,11 @@
       "Bash(git reset:*)",
       "Bash(railway login:*)",
       "Bash(vercel:*)",
-      "Bash(git remote add:*)"
+      "Bash(git remote add:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "Bash(git pull:*)",
+      "Bash(ls:*)"
     ],
     "deny": []
   }
