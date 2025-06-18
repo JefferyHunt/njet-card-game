@@ -2,7 +2,7 @@
 
 A Python implementation of the strategic card game **Njet** by Stefan Dorra, featuring intelligent AI opponents and a polished graphical interface.
 
-![Njet Game](Njet%20Rules_Page_1.jpg)
+![Njet Game]
 
 ## About the Game
 
