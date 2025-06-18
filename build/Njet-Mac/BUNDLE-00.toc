@@ -1,0 +1,1 @@
+([('Njet-Mac', '/Users/jefferyhunt/Code/Njet/dist/Njet-Mac', 'EXECUTABLE')],)

@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(brew install:*)",
+      "Bash(python3:*)",
+      "Bash(grep:*)",
+      "Bash(cat:*)",
+      "Bash(pkill:*)",
+      "Bash(true)",
+      "Bash(python test:*)",
+      "Bash(timeout:*)",
+      "Bash(rg:*)",
+      "Bash(sed:*)",
+      "Bash(rm:*)",
+      "Bash(python:*)",
+      "Bash(chmod:*)",
+      "Bash(docker-compose logs:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(pip3 install:*)",
+      "Bash(source:*)",
+      "Bash(pip install:*)",
+      "Bash(pyinstaller:*)",
+      "Bash(./dist/Njet-Mac-App/Njet-Mac-App)",
+      "Bash(./dist/Njet-Windows/Njet-Windows)",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+      "Bash(find:*)",
+      "Bash(npm install)",
+      "Bash(npm start)",
+      "Bash(npm install:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git reset:*)",
+      "Bash(railway login:*)",
+      "Bash(vercel:*)",
+      "Bash(git remote add:*)"
+    ],
+    "deny": []
+  }
+}
