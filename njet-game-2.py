@@ -6597,15 +6597,18 @@ class MainMenu:
                     # Request room creation once connected
                     self.relay_manager.create_room(player_name)
                 elif event_type == "room_created":
-                    # Update room code display
-                    room_code = data['roomCode']
-                    self.room_code_label.config(text=f"Room Code: {room_code}")
-                    messagebox.showinfo("Room Created", 
-                                       f"Room created successfully!\nRoom Code: {room_code}\n\nShare this code with other players.")
-                    # Show waiting screen
-                    self.show_waiting_for_players(self.relay_manager, True)
+                    # Schedule GUI updates on main thread
+                    def update_gui():
+                        room_code = data['roomCode']
+                        self.room_code_label.config(text=f"Room Code: {room_code}")
+                        messagebox.showinfo("Room Created", 
+                                           f"Room created successfully!\nRoom Code: {room_code}\n\nShare this code with other players.")
+                        # Show waiting screen
+                        self.show_waiting_for_players(self.relay_manager, True)
+                    self.root.after(0, update_gui)
                 elif event_type == "error":
-                    messagebox.showerror("Error", f"Failed to create room: {data.get('message', 'Unknown error')}")
+                    # Schedule error message on main thread
+                    self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to create room: {data.get('message', 'Unknown error')}"))
             
             self.relay_manager.set_connection_callback(on_connection_event)
             
@@ -6713,18 +6716,21 @@ class MainMenu:
                     # Request room join once connected
                     self.relay_manager.join_room(room_code, player_name)
                 elif event_type == "join_success":
-                    messagebox.showinfo("Joined Room", 
-                                       f"Successfully joined room {room_code}!\nWaiting for host to start the game...")
-                    # Show waiting screen
-                    self.show_waiting_for_players(self.relay_manager, False)
+                    # Schedule GUI updates on main thread
+                    def update_gui():
+                        messagebox.showinfo("Joined Room", 
+                                           f"Successfully joined room {room_code}!\nWaiting for host to start the game...")
+                        # Show waiting screen
+                        self.show_waiting_for_players(self.relay_manager, False)
+                    self.root.after(0, update_gui)
                 elif event_type == "join_failed":
                     error_msg = data.get('error', 'Unknown error')
-                    messagebox.showerror("Failed to Join", f"Could not join room {room_code}:\n{error_msg}")
+                    self.root.after(0, lambda: messagebox.showerror("Failed to Join", f"Could not join room {room_code}:\n{error_msg}"))
                 elif event_type == "game_started":
-                    # Start the actual game
-                    self.start_online_game(self.relay_manager, False)
+                    # Schedule game start on main thread
+                    self.root.after(0, lambda: self.start_online_game(self.relay_manager, False))
                 elif event_type == "error":
-                    messagebox.showerror("Error", f"Connection error: {data.get('message', 'Unknown error')}")
+                    self.root.after(0, lambda: messagebox.showerror("Error", f"Connection error: {data.get('message', 'Unknown error')}"))
             
             self.relay_manager.set_connection_callback(on_connection_event)
             
@@ -6768,8 +6774,12 @@ class MainMenu:
             # Check if we have enough players to start (2 for online games)
             if hasattr(network_manager, 'player_count') and network_manager.player_count >= 2:
                 if is_host:
-                    messagebox.showinfo("Player Connected", "Another player has joined!")
-                self.start_online_game(network_manager, is_host)
+                    # Schedule the messagebox and game start on the main thread
+                    self.root.after(0, lambda: messagebox.showinfo("Player Connected", "Another player has joined!"))
+                    self.root.after(100, lambda: self.start_online_game(network_manager, is_host))
+                else:
+                    # Non-host starts game immediately
+                    self.root.after(0, lambda: self.start_online_game(network_manager, is_host))
             else:
                 # Update waiting animation
                 current_text = self.waiting_label.cget("text")
