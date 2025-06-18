@@ -186,6 +186,7 @@ class RelayNetworkManager:
         self.player_name = None
         self.is_host = False
         self.connection_callback = None
+        self.player_count = 0
         
         if not SOCKETIO_AVAILABLE:
             raise ImportError("python-socketio library required for relay networking")
@@ -215,6 +216,7 @@ class RelayNetworkManager:
             print(f"Room created: {data['roomCode']}")
             self.room_code = data['roomCode']
             self.is_host = data['isHost']
+            self.player_count = 1  # Host is the first player
             if self.connection_callback:
                 self.connection_callback("room_created", data)
         
@@ -223,6 +225,7 @@ class RelayNetworkManager:
             print(f"Joined room: {data['roomCode']}")
             self.room_code = data['roomCode']
             self.is_host = data['isHost']
+            self.player_count = data.get('playerCount', 2)  # When joining, there are at least 2 players
             if self.connection_callback:
                 self.connection_callback("join_success", data)
         
@@ -235,6 +238,7 @@ class RelayNetworkManager:
         @self.sio.event
         def player_joined(data):
             print(f"Player joined: {data['playerName']}")
+            self.player_count = data.get('playerCount', self.player_count + 1)
             if self.connection_callback:
                 self.connection_callback("player_joined", data)
         
@@ -6761,7 +6765,8 @@ class MainMenu:
         
         # Check for connection
         def check_connection():
-            if network_manager.is_connected:
+            # Check if we have enough players to start (2 for online games)
+            if hasattr(network_manager, 'player_count') and network_manager.player_count >= 2:
                 if is_host:
                     messagebox.showinfo("Player Connected", "Another player has joined!")
                 self.start_online_game(network_manager, is_host)
