@@ -1,0 +1,342 @@
+/Users/jefferyhunt/Code/Njet/njet-game-2.py:506: RuntimeWarning: use sndarray: No module named 'numpy'
+(ModuleNotFoundError: No module named 'numpy')
+  sound = pygame.sndarray.make_sound(wave_array)
+2025-06-19 22:46:21.175 Python[42878:1943705] +[IMKClient subclass]: chose IMKClient_Modern
+2025-06-19 22:46:21.175 Python[42878:1943705] +[IMKInputSession subclass]: chose IMKInputSession_Modern
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.4)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+Audio system initialized successfully
+Loaded 4 music files:
+  1. Njet! 1.mp3
+  2. Njet! 2.mp3
+  3. Njet! 3.mp3
+  4. Njet! 4.mp3
+✓ Loaded SFX: ButtonPress.mp3
+✓ Loaded SFX: ShuffleDeal.mp3
+✓ Loaded SFX: DiscardSelect.mp3
+✓ Loaded SFX: PlayCard.mp3
+Successfully loaded 4/4 custom SFX files
+Could not create tone: sndarray module not available (ModuleNotFoundError: No module named 'numpy')
+Could not create tone: sndarray module not available (ModuleNotFoundError: No module named 'numpy')
+Could not create tone: sndarray module not available (ModuleNotFoundError: No module named 'numpy')
+Could not create tone: sndarray module not available (ModuleNotFoundError: No module named 'numpy')
+Could not create tone: sndarray module not available (ModuleNotFoundError: No module named 'numpy')
+Loaded custom SFX files and generated additional sound effects
+Settings loaded successfully
+🎵 Started playing: Njet! 1.mp3
+♪ button_press
+♪ button_press
+Screen resolution: 2560x1440
+Audio system initialized successfully
+Loaded 4 music files:
+  1. Njet! 1.mp3
+  2. Njet! 2.mp3
+  3. Njet! 3.mp3
+  4. Njet! 4.mp3
+✓ Loaded SFX: ButtonPress.mp3
+✓ Loaded SFX: ShuffleDeal.mp3
+✓ Loaded SFX: DiscardSelect.mp3
+✓ Loaded SFX: PlayCard.mp3
+Successfully loaded 4/4 custom SFX files
+Could not create tone: sndarray module not available (ModuleNotFoundError: No module named 'numpy')
+Could not create tone: sndarray module not available (ModuleNotFoundError: No module named 'numpy')
+Could not create tone: sndarray module not available (ModuleNotFoundError: No module named 'numpy')
+Could not create tone: sndarray module not available (ModuleNotFoundError: No module named 'numpy')
+Could not create tone: sndarray module not available (ModuleNotFoundError: No module named 'numpy')
+Loaded custom SFX files and generated additional sound effects
+Card sprite sheet loaded successfully
+✓ Table background loaded successfully - Original size: (1536, 1024)
+✓ HET board loaded successfully - Original size: (1536, 1024)
+Started new 4-player game
+DEBUG: start_game_with_players called
+DEBUG: Game created, phase: Phase.BLOCKING
+DEBUG: Player 0: Player 1 (Human)
+DEBUG: Player 1: Player 2 (AI)
+DEBUG: Player 2: Player 3 (AI)
+DEBUG: Player 3: Player 4 (AI)
+♪ shuffle_deal
+🎵 Started playing: Njet! 1.mp3
+DEBUG: About to setup UI
+DEBUG: setup_game_ui called - using Canvas approach
+DEBUG: Canvas table background updated: 1920x1080
+DEBUG: About to update display
+DEBUG: update_display called, phase: Phase.BLOCKING, current_player: 0
+DEBUG: Canvas info panel created
+DEBUG: info panel updated
+DEBUG: About to show phase: Phase.BLOCKING
+DEBUG: Calling show_blocking_phase for player 0
+DEBUG: show_blocking_phase called - Canvas version
+DEBUG: Cleared blocking buttons for new turn
+DEBUG: Scheduling canvas blocking layout creation
+DEBUG: Finished update_display
+DEBUG: Canvas table background updated: 1920x1080
+DEBUG: Canvas table background updated: 1920x1080
+DEBUG: HET board added to canvas
+DEBUG: HET board interactive areas created
+DEBUG: create_canvas_player_cards called, sprite_manager exists: True
+DEBUG: Failed to use sprite for card 0 of Blue: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 5 of Blue: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 1 of Green: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 3 of Green: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 7 of Green: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 0 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 2 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 3 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 5 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 6 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 8 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 9 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 0 of Yellow: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 6 of Yellow: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 7 of Yellow: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Displayed 15 cards for human player using sprites
+DEBUG: Displayed opponent cards for 3 players
+DEBUG: Canvas blocking layout created
+DEBUG: Canvas option clicked - category: trump, option: Yellow
+DEBUG: *** BLOCK_OPTION CALLED ***
+DEBUG: Requested block: trump=Yellow
+DEBUG: Player_idx parameter: None
+DEBUG: Current game player: 0 (Player 1), is_human=True
+DEBUG: Game phase: Phase.BLOCKING
+♪ block
+DEBUG: Human player 0 blocked trump=Yellow
+DEBUG: Disabling all blocking buttons to prevent multiple clicks
+DEBUG: About to call next_blocking_turn from block_option
+
+=== DEBUG: next_blocking_turn ENTRY [22:46:3] ===
+DEBUG: Called from: block_option:4547
+DEBUG: Current game state:
+  - Phase: Phase.BLOCKING
+  - Current player index: 0
+  - Total players: 4
+  - Current player: Player 1 (human)
+DEBUG: Blockable categories remaining: ['start_player', 'discard', 'trump', 'super_trump', 'points'] (total: 5)
+  - start_player: total=4, blocked=0, available=4
+  - discard: total=5, blocked=0, available=5
+  - trump: total=5, blocked=1, available=5
+  - super_trump: total=5, blocked=0, available=5
+  - points: total=5, blocked=0, available=5
+DEBUG: Turn progression calculation:
+  - Old player: 0 (Player 1)
+  - Calculation: (0 + 1) % 4 = 1
+PLAYER_IDX_CHANGE: [22:46:3] 0 -> 1 (from next_blocking_turn:4745)
+  - New player: 1 (Player 2) [AI]
+SUCCESS: Player changed from 0 to 1
+DEBUG: === next_blocking_turn EXIT [22:46:3] ===
+
+DEBUG: Cleared blocking turn in progress flag in next_blocking_turn
+DEBUG: Scheduling update_display in 100ms to ensure stable state
+DEBUG: Next player 1 (Player 2) is AI, scheduling turn after UI update
+DEBUG: *** IMMEDIATE AI SCHEDULING *** for player 1
+DEBUG: Added blocking token for trump/Yellow in color #497B75
+DEBUG: update_display called, phase: Phase.BLOCKING, current_player: 1
+DEBUG: Canvas info panel created
+DEBUG: info panel updated
+DEBUG: About to show phase: Phase.BLOCKING
+DEBUG: Calling show_blocking_phase for player 1
+DEBUG: show_blocking_phase called - Canvas version
+DEBUG: Cleared blocking buttons for new turn
+DEBUG: Scheduling canvas blocking layout creation
+DEBUG: Finished update_display
+DEBUG: ai_blocking_turn called for player 1
+DEBUG: AI Player 1 blocking start_player=1 (score: 0.95)
+♪ block
+DEBUG: AI player 1 blocked start_player=1, scheduling next turn
+DEBUG: Canvas table background updated: 1920x1080
+DEBUG: Cleared blocking turn in progress flag
+DEBUG: HET board added to canvas
+DEBUG: HET board interactive areas created
+DEBUG: create_canvas_player_cards called, sprite_manager exists: True
+DEBUG: Failed to use sprite for card 0 of Blue: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 5 of Blue: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 1 of Green: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 3 of Green: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 7 of Green: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 0 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 2 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 3 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 5 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 6 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 8 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 9 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 0 of Yellow: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 6 of Yellow: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 7 of Yellow: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Displayed 15 cards for human player using sprites
+DEBUG: Displayed opponent cards for 3 players
+DEBUG: Canvas blocking layout created
+DEBUG: ai_blocking_turn called for player 1
+DEBUG: AI Player 1 blocking start_player=0 (score: 0.95)
+♪ block
+DEBUG: AI player 1 blocked start_player=0, scheduling next turn
+
+=== DEBUG: next_blocking_turn ENTRY [22:46:3] ===
+DEBUG: Called from: callit:862
+DEBUG: Current game state:
+  - Phase: Phase.BLOCKING
+  - Current player index: 1
+  - Total players: 4
+  - Current player: Player 2 (AI)
+DEBUG: Blockable categories remaining: ['start_player', 'discard', 'trump', 'super_trump', 'points'] (total: 5)
+  - start_player: total=4, blocked=2, available=2
+  - discard: total=5, blocked=0, available=5
+  - trump: total=5, blocked=1, available=5
+  - super_trump: total=5, blocked=0, available=5
+  - points: total=5, blocked=0, available=5
+DEBUG: Turn progression calculation:
+  - Old player: 1 (Player 2)
+  - Calculation: (1 + 1) % 4 = 2
+PLAYER_IDX_CHANGE: [22:46:3] 1 -> 2 (from next_blocking_turn:4745)
+  - New player: 2 (Player 3) [AI]
+SUCCESS: Player changed from 1 to 2
+DEBUG: === next_blocking_turn EXIT [22:46:3] ===
+
+DEBUG: Cleared blocking turn in progress flag in next_blocking_turn
+DEBUG: Scheduling update_display in 100ms to ensure stable state
+DEBUG: Next player 2 (Player 3) is AI, scheduling turn after UI update
+
+=== DEBUG: next_blocking_turn ENTRY [22:46:3] ===
+DEBUG: Called from: callit:862
+DEBUG: Current game state:
+  - Phase: Phase.BLOCKING
+  - Current player index: 2
+  - Total players: 4
+  - Current player: Player 3 (AI)
+DEBUG: Blockable categories remaining: ['start_player', 'discard', 'trump', 'super_trump', 'points'] (total: 5)
+  - start_player: total=4, blocked=2, available=2
+  - discard: total=5, blocked=0, available=5
+  - trump: total=5, blocked=1, available=5
+  - super_trump: total=5, blocked=0, available=5
+  - points: total=5, blocked=0, available=5
+DEBUG: Turn progression calculation:
+  - Old player: 2 (Player 3)
+  - Calculation: (2 + 1) % 4 = 3
+PLAYER_IDX_CHANGE: [22:46:3] 2 -> 3 (from next_blocking_turn:4745)
+  - New player: 3 (Player 4) [AI]
+SUCCESS: Player changed from 2 to 3
+DEBUG: === next_blocking_turn EXIT [22:46:3] ===
+
+DEBUG: Cleared blocking turn in progress flag in next_blocking_turn
+DEBUG: Scheduling update_display in 100ms to ensure stable state
+DEBUG: Next player 3 (Player 4) is AI, scheduling turn after UI update
+DEBUG: update_display called, phase: Phase.BLOCKING, current_player: 3
+DEBUG: Canvas info panel created
+DEBUG: info panel updated
+DEBUG: About to show phase: Phase.BLOCKING
+DEBUG: Calling show_blocking_phase for player 3
+DEBUG: show_blocking_phase called - Canvas version
+DEBUG: Cleared blocking buttons for new turn
+DEBUG: Scheduling canvas blocking layout creation
+DEBUG: Finished update_display
+DEBUG: Canvas table background updated: 1920x1080
+DEBUG: update_display called, phase: Phase.BLOCKING, current_player: 3
+DEBUG: Canvas info panel created
+DEBUG: info panel updated
+DEBUG: About to show phase: Phase.BLOCKING
+DEBUG: Calling show_blocking_phase for player 3
+DEBUG: show_blocking_phase called - Canvas version
+DEBUG: Cleared blocking buttons for new turn
+DEBUG: Scheduling canvas blocking layout creation
+DEBUG: Finished update_display
+DEBUG: HET board added to canvas
+DEBUG: HET board interactive areas created
+DEBUG: create_canvas_player_cards called, sprite_manager exists: True
+DEBUG: Failed to use sprite for card 0 of Blue: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 5 of Blue: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 1 of Green: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 3 of Green: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 7 of Green: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 0 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 2 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 3 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 5 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 6 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 8 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 9 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 0 of Yellow: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 6 of Yellow: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 7 of Yellow: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Displayed 15 cards for human player using sprites
+DEBUG: Displayed opponent cards for 3 players
+DEBUG: Canvas blocking layout created
+DEBUG: ai_blocking_turn called for player 3
+DEBUG: AI Player 3 blocking trump=HET (score: 0.95)
+♪ block
+DEBUG: AI player 3 blocked trump=HET, scheduling next turn
+DEBUG: Canvas table background updated: 1920x1080
+DEBUG: HET board added to canvas
+DEBUG: HET board interactive areas created
+DEBUG: create_canvas_player_cards called, sprite_manager exists: True
+DEBUG: Failed to use sprite for card 0 of Blue: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 5 of Blue: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 1 of Green: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 3 of Green: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 7 of Green: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 0 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 2 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 3 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 5 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 6 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 8 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 9 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 0 of Yellow: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 6 of Yellow: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 7 of Yellow: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Displayed 15 cards for human player using sprites
+DEBUG: Displayed opponent cards for 3 players
+DEBUG: Canvas blocking layout created
+
+=== DEBUG: next_blocking_turn ENTRY [22:46:3] ===
+DEBUG: Called from: callit:862
+DEBUG: Current game state:
+  - Phase: Phase.BLOCKING
+  - Current player index: 3
+  - Total players: 4
+  - Current player: Player 4 (AI)
+DEBUG: Blockable categories remaining: ['start_player', 'discard', 'trump', 'super_trump', 'points'] (total: 5)
+  - start_player: total=4, blocked=2, available=2
+  - discard: total=5, blocked=0, available=5
+  - trump: total=5, blocked=2, available=4
+  - super_trump: total=5, blocked=0, available=5
+  - points: total=5, blocked=0, available=5
+DEBUG: Turn progression calculation:
+  - Old player: 3 (Player 4)
+  - Calculation: (3 + 1) % 4 = 0
+PLAYER_IDX_CHANGE: [22:46:3] 3 -> 0 (from next_blocking_turn:4745)
+  - New player: 0 (Player 1) [human]
+SUCCESS: Player changed from 3 to 0
+DEBUG: === next_blocking_turn EXIT [22:46:3] ===
+
+DEBUG: Cleared blocking turn in progress flag in next_blocking_turn
+DEBUG: Scheduling update_display in 100ms to ensure stable state
+DEBUG: update_display called, phase: Phase.BLOCKING, current_player: 0
+DEBUG: Canvas info panel created
+DEBUG: info panel updated
+DEBUG: About to show phase: Phase.BLOCKING
+DEBUG: Calling show_blocking_phase for player 0
+DEBUG: show_blocking_phase called - Canvas version
+DEBUG: Cleared blocking buttons for new turn
+DEBUG: Scheduling canvas blocking layout creation
+DEBUG: Finished update_display
+DEBUG: Canvas table background updated: 1920x1080
+DEBUG: HET board added to canvas
+DEBUG: HET board interactive areas created
+DEBUG: create_canvas_player_cards called, sprite_manager exists: True
+DEBUG: Failed to use sprite for card 0 of Blue: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 5 of Blue: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 1 of Green: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 3 of Green: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 7 of Green: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 0 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 2 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 3 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 5 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 6 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 8 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 9 of Red: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 0 of Yellow: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 6 of Yellow: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Failed to use sprite for card 7 of Yellow: 'PhotoImage' object has no attribute 'resize'
+DEBUG: Displayed 15 cards for human player using sprites
+DEBUG: Displayed opponent cards for 3 players
+DEBUG: Canvas blocking layout created

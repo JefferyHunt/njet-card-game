@@ -39,7 +39,13 @@
       "Bash(git branch:*)",
       "Bash(git push:*)",
       "Bash(git pull:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(git rm:*)",
+      "WebFetch(domain:njet-relay-server.onrender.com)",
+      "Bash(screencapture:*)",
+      "Bash(osascript:*)",
+      "Bash(awk:*)"
     ],
     "deny": []
   }

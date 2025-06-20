@@ -27,6 +27,14 @@ except ImportError:
     SOCKETIO_AVAILABLE = False
     print("python-socketio not available - relay networking will be disabled")
 
+# Optional PIL import for sprite sheet support
+try:
+    from PIL import Image, ImageTk
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
+    print("PIL/Pillow not available - will use text-based card rendering")
+
 # Game constants
 class Suit(Enum):
     RED = "Red"
@@ -390,25 +398,41 @@ class SoundManager:
             print("Music directory not found")
     
     def _generate_simple_sounds(self):
-        """Generate simple sound effects without numpy dependency"""
+        """Load SFX files and generate simple sound effects"""
         if not self.enabled:
             return
         
+        # Initialize with empty sounds dictionary
+        self.sounds = {}
+        
+        # Try to load custom SFX files first
+        sfx_loaded = self._load_sfx_files()
+        
+        # Generate or fallback for remaining sounds
         try:
-            # Try to generate actual pygame sounds without numpy
-            self.sounds = {
-                'card_play': self._create_simple_tone(800, 0.1),
-                'block': self._create_simple_tone(600, 0.15), 
-                'phase_change': self._create_simple_tone(1000, 0.3),
-                'trick_won': self._create_simple_tone(880, 0.25),
-                'victory': self._create_simple_tone(1200, 0.5),
-                'error': self._create_simple_tone(300, 0.2)
-            }
-            print("Generated pygame sound effects successfully")
+            # Add/override with generated sounds if not loaded from files
+            if 'block' not in self.sounds:
+                self.sounds['block'] = self._create_simple_tone(600, 0.15)
+            if 'phase_change' not in self.sounds:
+                self.sounds['phase_change'] = self._create_simple_tone(1000, 0.3)
+            if 'trick_won' not in self.sounds:
+                self.sounds['trick_won'] = self._create_simple_tone(880, 0.25)
+            if 'victory' not in self.sounds:
+                self.sounds['victory'] = self._create_simple_tone(1200, 0.5)
+            if 'error' not in self.sounds:
+                self.sounds['error'] = self._create_simple_tone(300, 0.2)
+                
+            if sfx_loaded:
+                print("Loaded custom SFX files and generated additional sound effects")
+            else:
+                print("Generated pygame sound effects successfully")
         except Exception as e:
             print(f"Could not generate pygame sounds: {e}")
-            # Fallback to system beeps
-            self.sounds = {
+            # Fallback to system beeps for any missing sounds
+            fallback_sounds = {
+                'button_press': 'beep',
+                'shuffle_deal': 'beep',
+                'discard_select': 'beep',
                 'card_play': 'beep',
                 'block': 'beep', 
                 'phase_change': 'beep',
@@ -416,7 +440,46 @@ class SoundManager:
                 'victory': 'beep',
                 'error': 'beep'
             }
-            print("Using system beep fallback")
+            # Only add fallbacks for sounds that aren't already loaded
+            for sound_name, fallback in fallback_sounds.items():
+                if sound_name not in self.sounds:
+                    self.sounds[sound_name] = fallback
+            print("Using system beep fallback for missing sounds")
+    
+    def _load_sfx_files(self):
+        """Load custom SFX files from the SFX directory"""
+        sfx_dir = "SFX"
+        sfx_files = {
+            'button_press': 'ButtonPress.mp3',
+            'shuffle_deal': 'ShuffleDeal.mp3', 
+            'discard_select': 'DiscardSelect.mp3',
+            'card_play': 'PlayCard.mp3'
+        }
+        
+        loaded_count = 0
+        
+        if not os.path.exists(sfx_dir):
+            print(f"SFX directory '{sfx_dir}' not found")
+            return False
+        
+        for sound_name, filename in sfx_files.items():
+            file_path = os.path.join(sfx_dir, filename)
+            try:
+                if os.path.exists(file_path):
+                    sound = pygame.mixer.Sound(file_path)
+                    sound.set_volume(self.sfx_volume)
+                    self.sounds[sound_name] = sound
+                    loaded_count += 1
+                    print(f"✓ Loaded SFX: {filename}")
+                else:
+                    print(f"✗ SFX file not found: {file_path}")
+            except Exception as e:
+                print(f"✗ Error loading SFX {filename}: {e}")
+        
+        if loaded_count > 0:
+            print(f"Successfully loaded {loaded_count}/{len(sfx_files)} custom SFX files")
+            return True
+        return False
     
     def _create_simple_tone(self, frequency=800, duration=0.1):
         """Create a simple tone using built-in array module instead of numpy"""
@@ -607,18 +670,12 @@ class SoundManager:
             return
             
         try:
-            # Only check for USEREVENT, not all events to avoid interfering with tkinter
-            events = pygame.event.get(pygame.USEREVENT + 1)
-            for event in events:
-                if event.type == pygame.USEREVENT + 1:  # Music ended
-                    self._next_music_track()
+            # Use simple busy check instead of events to avoid GIL threading issues
+            if not pygame.mixer.music.get_busy() and self.music_playing:
+                self._next_music_track()
         except Exception as e:
-            # If pygame events don't work, fall back to checking if music is still playing
-            try:
-                if not pygame.mixer.music.get_busy() and self.music_playing:
-                    self._next_music_track()
-            except Exception:
-                pass  # Silently ignore pygame errors
+            # Silently ignore pygame errors to prevent crashes
+            pass
     
     def _next_music_track(self):
         """Switch to the next music track"""
@@ -712,7 +769,7 @@ class SoundManager:
             self.stop_music()
         return self.enabled
 
-class NjetGame:
+class HETGame:
     def __init__(self, num_players: int):
         self.num_players = num_players
         self.players = []
@@ -807,9 +864,9 @@ class NjetGame:
         board = {
             "start_player": list(range(self.num_players)),
             "discard": ["0 cards", "1 card", "2 cards", "2 non-zeros", "Pass 2 right"],
-            "trump": [suit for suit in Suit] + ["Njet"],
-            "super_trump": [suit for suit in Suit] + ["Njet"],
-            "points": ["-2", "1", "2", "3", "4"]
+            "trump": [suit for suit in Suit] + ["HET"],
+            "super_trump": [suit for suit in Suit] + ["HET"],
+            "points": ["1", "2", "3", "4", "-2"]
         }
         
         # Add tracking for who blocked what
@@ -887,7 +944,7 @@ class NjetGame:
             return "trump"
         
         # If card's suit is trump suit, it belongs to trump suit
-        if trump_suit and trump_suit != "Njet" and card.suit == trump_suit:
+        if trump_suit and trump_suit != "HET" and card.suit == trump_suit:
             return "trump"
         
         # Otherwise, it belongs to its natural suit
@@ -905,7 +962,7 @@ class NjetGame:
                 if super_trump_suit and card.suit == super_trump_suit and card.value == 0:
                     result.append(card)
                 # Include trump suit cards (but exclude supertrump 0s of that color)
-                elif trump_suit and trump_suit != "Njet" and card.suit == trump_suit:
+                elif trump_suit and trump_suit != "HET" and card.suit == trump_suit:
                     # Exclude supertrump 0s even if they're in trump color
                     if not (super_trump_suit and card.suit == super_trump_suit and card.value == 0):
                         result.append(card)
@@ -953,8 +1010,8 @@ class NjetGame:
             
             if available:
                 final_choice = available[0]
-                # Handle "Njet" options specially
-                if final_choice == "Njet":
+                # Handle "HET" options specially
+                if final_choice == "HET":
                     if category == "trump":
                         self.game_params[category] = None  # No trump
                     elif category == "super_trump":
@@ -1615,13 +1672,118 @@ class NjetGame:
         
         return 0.5  # Default neutral evaluation
 
-class NjetGUI:
+class CardSpriteManager:
+    """Manages card sprite sheet for rendering cards from a sprite sheet image."""
+    
+    def __init__(self, sprite_sheet_path):
+        """Initialize the sprite manager with the sprite sheet image.
+        
+        Sprite sheet layout:
+        - 4 rows (Red Hearts, Green Clubs, Yellow Diamonds, Blue Spades)
+        - 11 columns (0-9, card back)
+        - Each card is approximately 300x450 pixels with bleed
+        """
+        if not PIL_AVAILABLE:
+            raise ImportError("PIL/Pillow is required for sprite sheet support")
+            
+        # Load the sprite sheet
+        self.sprite_sheet = Image.open(sprite_sheet_path)
+        self.sheet_width, self.sheet_height = self.sprite_sheet.size
+        
+        # Calculate card dimensions based on sprite sheet size
+        self.card_width = self.sheet_width // 11  # 11 columns (0-9 + back)
+        self.card_height = self.sheet_height // 4  # 4 rows (4 suits)
+        
+        # Suit mapping to row index (based on your description)
+        self.suit_to_row = {
+            Suit.RED: 0,     # Red Hearts (top row)
+            Suit.GREEN: 1,   # Green Clubs
+            Suit.YELLOW: 2,  # Yellow Diamonds  
+            Suit.BLUE: 3     # Blue Spades (bottom row)
+        }
+        
+        # Cache for rendered card images
+        self.card_cache = {}
+        self.card_back_cache = {}
+        
+    def get_card_image(self, card, width=None, height=None):
+        """Get card image - defaults to native resolution for best quality"""
+        # Use native resolution by default for perfect quality
+        if width is None:
+            width = self.card_width  # Native 300px
+        if height is None:
+            height = self.card_height  # Native 450px
+        cache_key = f"{card.suit.value}_{card.value}_{width}_{height}"
+        
+        if cache_key not in self.card_cache:
+            # Calculate crop coordinates
+            row = self.suit_to_row[card.suit]
+            col = card.value  # Values 0-9 map directly to columns 0-9
+            
+            left = col * self.card_width
+            top = row * self.card_height
+            right = left + self.card_width
+            bottom = top + self.card_height
+            
+            # Crop the card from sprite sheet
+            card_image = self.sprite_sheet.crop((left, top, right, bottom))
+            
+            # Use high-quality resampling for better image quality
+            if width == self.card_width and height == self.card_height:
+                # Native size - no resampling needed
+                pass
+            else:
+                # Resize with high-quality filtering
+                card_image = card_image.resize((width, height), Image.Resampling.LANCZOS)
+            
+            # Store the PIL Image in cache
+            self.card_cache[cache_key] = card_image
+            
+        return self.card_cache[cache_key]
+    
+    def get_card_back_image(self, width=None, height=None):
+        """Get card back - defaults to native resolution for best quality"""
+        if width is None:
+            width = self.card_width  # Native 300px
+        if height is None:
+            height = self.card_height  # Native 450px
+        cache_key = f"back_{width}_{height}"
+        
+        if cache_key not in self.card_back_cache:
+            # Card back is in column 10 (rightmost), any row works (they should be identical)
+            row = 0  # Use top row
+            col = 10  # Card back column
+            
+            left = col * self.card_width
+            top = row * self.card_height
+            right = left + self.card_width
+            bottom = top + self.card_height
+            
+            # Crop the card back
+            back_image = self.sprite_sheet.crop((left, top, right, bottom))
+            
+            # Use high-quality resampling for better image quality
+            if width == self.card_width and height == self.card_height:
+                # Native size - no resampling needed
+                pass
+            else:
+                # Resize with high-quality filtering
+                back_image = back_image.resize((width, height), Image.Resampling.LANCZOS)
+            
+            # Store the PIL Image in cache
+            self.card_back_cache[cache_key] = back_image
+            
+        return self.card_back_cache[cache_key]
+
+class HETGUI:
     def __init__(self, root, num_players=None, main_menu=None, network_manager=None):
         self.root = root
         self.main_menu = main_menu
         self.network_manager = network_manager
-        self.root.title("Njet - Card Game by Stefan Dorra")
-        self.root.geometry("1400x972")
+        self.root.title("HET - Card Game by Stefan Dorra")
+        
+        # Set up responsive window sizing
+        self.setup_responsive_window()
         
         # Initialize sound manager
         self.sound_manager = SoundManager()
@@ -1681,6 +1843,24 @@ class NjetGUI:
         self.normal_font = font.Font(family="Arial", size=12)
         self.card_font = font.Font(family="Arial", size=14, weight="bold")
         
+        # Initialize sprite sheet manager
+        self.sprite_manager = None
+        if PIL_AVAILABLE:
+            try:
+                self.sprite_manager = CardSpriteManager("CardSpriteSheet.png")
+                print("Card sprite sheet loaded successfully")
+            except Exception as e:
+                print(f"Failed to load sprite sheet: {e}")
+                self.sprite_manager = None
+        
+        # Initialize table background image
+        self.table_image = None
+        self.load_table_background()
+        
+        # Initialize HET board image  
+        self.het_board_source = None
+        self.load_het_board()
+        
         # Track player frame positions for animations
         self.player_frames = {}  # player_idx -> tkinter frame widget
         
@@ -1700,6 +1880,151 @@ class NjetGUI:
             self.setup_players(num_players)
         else:
             self.show_player_selection()
+    
+    def setup_responsive_window(self):
+        """Set up responsive window sizing and fullscreen support"""
+        # Get screen dimensions
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        
+        print(f"Screen resolution: {screen_width}x{screen_height}")
+        
+        # Calculate optimal window size based on screen
+        if screen_width >= 1920 and screen_height >= 1080:
+            # High resolution screens - use larger window
+            window_width = min(1920, screen_width - 100)
+            window_height = min(1080, screen_height - 100)
+        elif screen_width >= 1600 and screen_height >= 900:
+            # Medium resolution screens
+            window_width = min(1600, screen_width - 80)
+            window_height = min(900, screen_height - 80)
+        else:
+            # Smaller screens - adjust accordingly
+            window_width = min(1400, screen_width - 60)
+            window_height = min(800, screen_height - 60)
+        
+        # Set initial window size to use most of screen
+        self.root.geometry(f"{window_width}x{window_height}")
+        
+        # Center window on screen
+        x = (screen_width - window_width) // 2
+        y = (screen_height - window_height) // 2
+        self.root.geometry(f"{window_width}x{window_height}+{x}+{y}")
+        
+        # Configure root window for proper expansion
+        self.root.configure(bg="#2C3E50")  # Remove any default background
+        self.root.grid_rowconfigure(0, weight=1)
+        self.root.grid_columnconfigure(0, weight=1)
+        
+        # Enable fullscreen toggle with F11
+        self.root.bind('<F11>', self.toggle_fullscreen)
+        self.root.bind('<Escape>', self.exit_fullscreen)
+        
+        # Track fullscreen state
+        self.is_fullscreen = False
+        
+        # Bind to window state changes to detect fullscreen
+        self.root.bind('<Configure>', self.on_window_configure)
+        
+        # Make window resizable
+        self.root.resizable(True, True)
+        
+        # Set minimum window size
+        self.root.minsize(1200, 700)
+        
+        # Add fullscreen info to title
+        self.root.after(1000, self.add_fullscreen_info)
+    
+    def toggle_fullscreen(self, event=None):
+        """Toggle fullscreen mode"""
+        self.is_fullscreen = not self.is_fullscreen
+        self.root.attributes('-fullscreen', self.is_fullscreen)
+        
+        if self.is_fullscreen:
+            print("Entered fullscreen mode")
+            # Force layout update for fullscreen
+            self.root.after(100, self.update_layout_for_fullscreen)
+        else:
+            print("Exited fullscreen mode")
+            self.root.after(100, self.update_layout_for_windowed)
+    
+    def exit_fullscreen(self, event=None):
+        """Exit fullscreen mode"""
+        if self.is_fullscreen:
+            self.is_fullscreen = False
+            self.root.attributes('-fullscreen', False)
+            print("Exited fullscreen mode")
+            self.root.after(100, self.update_layout_for_windowed)
+    
+    def on_window_configure(self, event=None):
+        """Handle window configuration changes"""
+        if event and event.widget == self.root:
+            # Check if window is maximized/fullscreen
+            current_width = self.root.winfo_width()
+            current_height = self.root.winfo_height()
+            screen_width = self.root.winfo_screenwidth()
+            screen_height = self.root.winfo_screenheight()
+            
+            # Detect if we're effectively in fullscreen
+            if (current_width >= screen_width * 0.95 and 
+                current_height >= screen_height * 0.95):
+                if not hasattr(self, 'is_fullscreen') or not self.is_fullscreen:
+                    print("Window is maximized/fullscreen")
+                    self.root.after(100, self.update_layout_for_fullscreen)
+            else:
+                if hasattr(self, 'is_fullscreen') and self.is_fullscreen:
+                    self.root.after(100, self.update_layout_for_windowed)
+    
+    def update_layout_for_fullscreen(self):
+        """Update layout when entering fullscreen"""
+        print("Updating layout for fullscreen")
+        
+        # Get screen size for responsive padding
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        
+        # Calculate responsive padding based on screen size
+        if screen_width >= 2560:  # 4K or ultrawide
+            padx, pady = 80, 40
+        elif screen_width >= 1920:  # Full HD
+            padx, pady = 60, 30
+        else:  # Smaller screens
+            padx, pady = 40, 20
+        
+        # Update grid layout for fullscreen
+        if hasattr(self, 'game_area'):
+            self.game_area.grid(row=1, column=0, sticky="nsew", padx=padx, pady=pady)
+        
+        # Ensure main container expands properly
+        if hasattr(self, 'main_container'):
+            self.main_container.grid(row=0, column=0, sticky="nsew")
+        
+        # Update any existing layouts
+        self.root.update_idletasks()
+        
+        # If we're in a game, refresh the display
+        if hasattr(self, 'game') and hasattr(self.game, 'current_phase'):
+            self.update_display()
+    
+    def update_layout_for_windowed(self):
+        """Update layout when returning to windowed mode"""
+        print("Updating layout for windowed mode")
+        # Restore normal padding
+        if hasattr(self, 'game_area'):
+            self.game_area.grid(row=1, column=0, sticky="nsew", padx=10, pady=5)
+        
+        # Update any existing layouts
+        self.root.update_idletasks()
+        
+        # If we're in a game, refresh the display
+        if hasattr(self, 'game') and hasattr(self.game, 'current_phase'):
+            self.update_display()
+    
+    def add_fullscreen_info(self):
+        """Add fullscreen control information to the window"""
+        current_title = self.root.title()
+        if "F11" not in current_title:
+            self.root.title(f"{current_title} - Press F11 for Fullscreen")
     
     def _check_music_events(self):
         """Periodically check for music events"""
@@ -1721,7 +2046,7 @@ class NjetGUI:
         # Title
         title = tk.Label(main_frame, text="NJET!", font=self.title_font,
                         bg=self.colors["bg"], fg=self.colors["accent"])
-        title.pack(pady=20)
+        title.pack(pady=50)
         
         subtitle = tk.Label(main_frame, text="A trick-taking game by Stefan Dorra",
                            font=self.normal_font, bg=self.colors["bg"], fg=self.colors["light_text"])
@@ -1732,7 +2057,7 @@ class NjetGUI:
         select_frame.pack(pady=50)
         
         tk.Label(select_frame, text="Select number of players:",
-                font=self.header_font, bg=self.colors["bg"], fg=self.colors["light_text"]).pack(pady=20)
+                font=self.header_font, bg=self.colors["bg"], fg=self.colors["light_text"]).pack(pady=50)
         
         button_frame = tk.Frame(select_frame, bg=self.colors["bg"])
         button_frame.pack()
@@ -1774,7 +2099,7 @@ class NjetGUI:
         
         # Title
         tk.Label(main_frame, text=f"Setup {total_players} Players",
-                font=self.title_font, bg=self.colors["bg"], fg="white").pack(pady=20)
+                font=self.title_font, bg=self.colors["bg"], fg="white").pack(pady=50)
         
         # Player setup frame
         setup_frame = tk.Frame(main_frame, bg=self.colors["bg"])
@@ -1832,14 +2157,14 @@ class NjetGUI:
         # Start button
         tk.Button(main_frame, text="Start Game", font=self.normal_font,
                  command=self.start_game_with_players,
-                 width=15, height=2).pack(pady=20)
+                 width=15, height=2).pack(pady=50)
     
     def start_game_with_players(self):
         """Start game with configured players"""
         print("DEBUG: start_game_with_players called")
         
         # Create game with player names and types
-        self.game = NjetGame(self.total_players)
+        self.game = HETGame(self.total_players)
         print(f"DEBUG: Game created, phase: {self.game.current_phase}")
         
         # Update player names and types
@@ -1850,7 +2175,8 @@ class NjetGUI:
             self.game.players[i].is_human = is_human
             print(f"DEBUG: Player {i}: {name} ({'Human' if is_human else 'AI'})")
         
-        self.game.deal_cards()
+        # Deal cards with sound and animation
+        self.deal_cards_with_animation()
         self.selected_card = None
         self.blocking_buttons = {}
         
@@ -1879,7 +2205,7 @@ class NjetGUI:
     def start_interactive_tutorial(self):
         """Start the interactive tutorial with guided gameplay"""
         # Create a scripted tutorial game setup
-        self.tutorial_game = NjetGame(4)
+        self.tutorial_game = HETGame(4)
         
         # Set up tutorial players with specific names and types
         self.tutorial_game.players[0].name = "You (Learning)"
@@ -1956,20 +2282,20 @@ class NjetGUI:
         main_frame.pack(expand=True, fill=tk.BOTH, padx=40, pady=40)
         
         # Title
-        title = tk.Label(main_frame, text="🎓 Interactive Njet Tutorial", 
+        title = tk.Label(main_frame, text="🎓 Interactive HET Tutorial", 
                         font=self.title_font, bg=self.colors["bg"], fg="#F1C40F")
-        title.pack(pady=20)
+        title.pack(pady=50)
         
         # Welcome content
         content_frame = tk.Frame(main_frame, bg="#34495E", relief=tk.RAISED, bd=3)
-        content_frame.pack(expand=True, fill=tk.BOTH, pady=20)
+        content_frame.pack(expand=True, fill=tk.BOTH, pady=50)
         
         welcome_text = tk.Text(content_frame, font=self.normal_font, bg="#ECF0F1", fg="#2C3E50", 
-                              wrap=tk.WORD, relief=tk.FLAT, bd=0, padx=20, pady=20)
+                              wrap=tk.WORD, relief=tk.FLAT, bd=0, padx=50, pady=50)
         
-        welcome_content = """Welcome to the Interactive Njet Tutorial!
+        welcome_content = """Welcome to the Interactive HET Tutorial!
 
-🎯 GOAL: Learn to play Njet through hands-on experience
+🎯 GOAL: Learn to play HET through hands-on experience
 
 📖 WHAT YOU'LL LEARN:
 • How to analyze your hand and make strategic decisions
@@ -1986,7 +2312,7 @@ against AI guides who will help teach you the game step by step.
 We've given you a specific hand designed to demonstrate key concepts.
 You'll learn to evaluate card strength, suit distribution, and strategic options.
 
-Ready to become a Njet expert? Let's start!"""
+Ready to become a HET expert? Let's start!"""
         
         welcome_text.insert(tk.END, welcome_content)
         welcome_text.configure(state=tk.DISABLED)
@@ -1994,7 +2320,7 @@ Ready to become a Njet expert? Let's start!"""
         
         # Navigation
         nav_frame = tk.Frame(main_frame, bg=self.colors["bg"])
-        nav_frame.pack(fill=tk.X, pady=20)
+        nav_frame.pack(fill=tk.X, pady=50)
         
         home_btn = tk.Button(nav_frame, text="🏠 Back to Menu", font=self.normal_font,
                             width=15, height=2, bg="#95A5A6", fg="white",
@@ -2009,12 +2335,12 @@ Ready to become a Njet expert? Let's start!"""
     def tutorial_hand_analysis(self):
         """Step 2: Analyze the tutorial hand"""
         main_frame = tk.Frame(self.root, bg=self.colors["bg"])
-        main_frame.pack(expand=True, fill=tk.BOTH, padx=20, pady=20)
+        main_frame.pack(expand=True, fill=tk.BOTH, padx=50, pady=50)
         
         # Title
         title = tk.Label(main_frame, text="📋 Step 1: Analyze Your Hand", 
                         font=self.header_font, bg=self.colors["bg"], fg="#F1C40F")
-        title.pack(pady=10)
+        title.pack(pady=30)
         
         # Split into analysis and cards
         content_frame = tk.Frame(main_frame, bg=self.colors["bg"])
@@ -2026,10 +2352,10 @@ Ready to become a Njet expert? Let's start!"""
         
         analysis_title = tk.Label(analysis_frame, text="💡 Hand Analysis", 
                                  font=('Arial', 14, 'bold'), bg="#34495E", fg="white")
-        analysis_title.pack(pady=10)
+        analysis_title.pack(pady=30)
         
         analysis_text = tk.Text(analysis_frame, font=('Arial', 10), bg="#ECF0F1", fg="#2C3E50", 
-                               wrap=tk.WORD, relief=tk.FLAT, bd=0, padx=15, pady=15)
+                               wrap=tk.WORD, relief=tk.FLAT, bd=0, padx=35, pady=35)
         
         analysis_content = """🔍 YOUR HAND BREAKDOWN:
 
@@ -2070,12 +2396,12 @@ Ready to become a Njet expert? Let's start!"""
         
         cards_title = tk.Label(cards_frame, text="🃏 Your Cards", 
                               font=('Arial', 14, 'bold'), bg="#2C3E50", fg="white")
-        cards_title.pack(pady=10)
+        cards_title.pack(pady=30)
         
         # Show cards by suit
         for suit in Suit:
             suit_frame = tk.Frame(cards_frame, bg="#2C3E50")
-            suit_frame.pack(fill=tk.X, padx=10, pady=5)
+            suit_frame.pack(fill=tk.X, padx=30, pady=5)
             
             suit_cards = [c for c in self.tutorial_game.players[0].cards if c.suit == suit]
             if suit_cards:
@@ -2091,7 +2417,7 @@ Ready to become a Njet expert? Let's start!"""
         
         # Navigation
         nav_frame = tk.Frame(main_frame, bg=self.colors["bg"])
-        nav_frame.pack(fill=tk.X, pady=20)
+        nav_frame.pack(fill=tk.X, pady=50)
         
         back_btn = tk.Button(nav_frame, text="← Back", font=self.normal_font,
                             width=12, height=2, command=self.tutorial_prev_step)
@@ -2102,7 +2428,7 @@ Ready to become a Njet expert? Let's start!"""
                             command=self.exit_tutorial, cursor="hand2")
         exit_btn.pack(side=tk.LEFT, padx=(10, 0))
         
-        next_btn = tk.Button(nav_frame, text="Start Blocking Phase →", font=self.normal_font,
+        next_btn = tk.Button(nav_frame, text="Start HET! Phase →", font=self.normal_font,
                             width=20, height=2, bg=self.colors["success"], fg="white",
                             command=self.tutorial_next_step)
         next_btn.pack(side=tk.RIGHT)
@@ -2137,12 +2463,12 @@ Ready to become a Njet expert? Let's start!"""
         
         title = tk.Label(main_frame, text="🎉 Tutorial Complete!", 
                         font=self.title_font, bg=self.colors["bg"], fg="#27AE60")
-        title.pack(pady=20)
+        title.pack(pady=50)
         
         completion_text = tk.Text(main_frame, font=self.normal_font, bg="#ECF0F1", fg="#2C3E50", 
-                                 wrap=tk.WORD, relief=tk.FLAT, bd=0, padx=20, pady=20)
+                                 wrap=tk.WORD, relief=tk.FLAT, bd=0, padx=50, pady=50)
         
-        completion_content = """Congratulations! You've completed the Njet tutorial!
+        completion_content = """Congratulations! You've completed the HET tutorial!
 
 🎓 WHAT YOU'VE LEARNED:
 ✅ Hand analysis and strategic evaluation
@@ -2152,7 +2478,7 @@ Ready to become a Njet expert? Let's start!"""
 ✅ Advanced concepts like card counting
 
 🎮 READY TO PLAY:
-You now understand the core concepts of Njet and are ready to play against challenging AI opponents. 
+You now understand the core concepts of HET and are ready to play against challenging AI opponents. 
 
 💡 REMEMBER:
 • Analyze your hand before blocking
@@ -2165,7 +2491,7 @@ Good luck in your future games!"""
         
         completion_text.insert(tk.END, completion_content)
         completion_text.configure(state=tk.DISABLED)
-        completion_text.pack(expand=True, fill=tk.BOTH, pady=20)
+        completion_text.pack(expand=True, fill=tk.BOTH, pady=50)
         
         # Navigation
         nav_frame = tk.Frame(main_frame, bg=self.colors["bg"])
@@ -2200,11 +2526,11 @@ Good luck in your future games!"""
         guidance_label = tk.Label(tutorial_panel, text=guidance_text, 
                                  font=('Arial', 9), bg="#8E44AD", fg="white",
                                  wraplength=250, justify=tk.LEFT)
-        guidance_label.pack(padx=10, pady=(0, 5))
+        guidance_label.pack(padx=30, pady=(5, 5))
         
         # Tutorial navigation buttons
         nav_frame = tk.Frame(tutorial_panel, bg="#8E44AD")
-        nav_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+        nav_frame.pack(fill=tk.X, padx=30, pady=(0, 10))
         
         if self.tutorial_step > 1:
             back_btn = tk.Button(nav_frame, text="← Back", font=('Arial', 8),
@@ -2225,15 +2551,15 @@ Good luck in your future games!"""
     def get_tutorial_guidance(self, overlay_type):
         """Get guidance text for different tutorial phases"""
         guidance = {
-            "blocking_intro": """🚫 BLOCKING PHASE
+            "blocking_intro": """🚫 HET! PHASE
 
-This is where strategy begins! Each player uses blocking tokens to eliminate game options.
+Players use blocking tokens to eliminate game options they don't want.
 
-👆 YOUR TURN: Look at the blocking board below. Each row represents a game rule you can change.
+👆 YOUR TURN: Look at the green table below. Each row shows different game rules you can block.
 
-🎯 GOAL: Block options that would hurt your hand. Based on your analysis, consider blocking GREEN as trump since you're weak there.
+🎯 STRATEGY: You have weak GREEN cards (0, 1, 2), so block GREEN as trump.
 
-Click any available button to place your blocking token!""",
+💡 Click the "Green" button in the "Trump Suit" row to block green trump!""",
             
             "blocking_practice": """🎯 GREAT CHOICE!
 
@@ -2245,14 +2571,14 @@ You're learning to block strategically. Notice how each block affects the final 
             
             "team_selection": """👥 TEAM FORMATION
 
-The starting player chooses teammates for this round. Teams are temporary!
+The AI will automatically form teams for the tutorial.
 
-🎯 STRATEGY: Choose partners based on:
-• Table position (across is often good)
+🎯 WHAT'S HAPPENING: The starting player (AI) is choosing teammates. In real games, you'd select based on:
+• Table position (across is often good)  
 • Likely hand strength
 • Trump suit possibilities
 
-💡 TIP: In 4-player games, you pick 1 teammate for a 2v2 match.""",
+💡 WATCHING: Teams are being formed for a 2v2 match. Next we'll move to trick-taking!""",
             
             "trick_taking": """🃏 TRICK-TAKING PHASE
 
@@ -2323,7 +2649,7 @@ Now the real game begins! Use your cards to win tricks and score points.
         hint_text = tk.Label(hint_frame, text=current_hint, 
                            font=('Arial', 8), bg="#34495E", fg="white",
                            wraplength=200, justify=tk.LEFT)
-        hint_text.pack(padx=10, pady=(0, 8))
+        hint_text.pack(padx=30, pady=(0, 8))
     
     def get_current_phase_hints(self):
         """Get relevant strategy hints for current game phase"""
@@ -2605,63 +2931,108 @@ Now the real game begins! Use your cards to win tricks and score points.
             self.animate_card_to_trick(player_idx, card)
 
     def setup_game_ui(self):
-        """Setup the main game UI"""
-        print("DEBUG: setup_game_ui called")
+        """Setup the main game UI using Canvas for true transparency"""
+        print("DEBUG: setup_game_ui called - using Canvas approach")
         
         # Clear window
         for widget in self.root.winfo_children():
             widget.destroy()
         
-        # Main container
-        self.main_container = tk.Frame(self.root, bg=self.colors["bg"])
-        self.main_container.pack(expand=True, fill=tk.BOTH)
+        # Create main canvas that fills the entire window
+        self.main_canvas = tk.Canvas(self.root, highlightthickness=0, bg=self.colors["bg"])
+        self.main_canvas.pack(fill=tk.BOTH, expand=True)
         
-        # Top info panel
-        self.info_panel = tk.Frame(self.main_container, bg=self.colors["bg"], height=100)
-        self.info_panel.pack(fill=tk.X, padx=10, pady=5)
-        self.info_panel.pack_propagate(False)
+        # Bind canvas resize to update table background
+        self.main_canvas.bind('<Configure>', self.on_canvas_resize)
         
-        # Add sound controls to info panel
-        sound_frame = tk.Frame(self.info_panel, bg=self.colors["bg"])
-        sound_frame.pack(side=tk.RIGHT, padx=10)
+        # Store canvas items and widgets for easy management
+        print("DEBUG: *** RESETTING CANVAS ITEMS DICTIONARY ***")
+        self.canvas_items = {}
+        self.canvas_widgets = {}
         
-        # Sound toggle button
-        sound_icon = "🔊" if self.sound_manager.enabled else "🔇"
-        self.sound_button = tk.Button(sound_frame, text=sound_icon, 
-                                     command=self.toggle_sound,
-                                     font=('Arial', 16), bg="#34495E", fg="white",
-                                     borderwidth=0, padx=5, pady=2)
-        self.sound_button.pack(side=tk.TOP)
+        # Initialize canvas items safely
+        if not hasattr(self, 'canvas_items'):
+            self.canvas_items = {}
+        if not hasattr(self, 'canvas_widgets'):
+            self.canvas_widgets = {}
         
-        # Music toggle button
-        music_icon = "🎵" if self.sound_manager.music_enabled else "🔇"
-        self.music_button = tk.Button(sound_frame, text=music_icon, 
-                                     command=self.toggle_music,
-                                     font=('Arial', 12), bg="#34495E", fg="white",
-                                     borderwidth=0, padx=5, pady=2)
-        self.music_button.pack(side=tk.TOP)
-        
-        # Volume controls
-        volume_frame = tk.Frame(sound_frame, bg=self.colors["bg"])
-        volume_frame.pack(side=tk.TOP, pady=2)
-        
-        tk.Label(volume_frame, text="Vol:", font=('Arial', 8), 
-                bg=self.colors["bg"], fg="white").pack(side=tk.LEFT)
-        
-        self.volume_scale = tk.Scale(volume_frame, from_=0, to=100, orient=tk.HORIZONTAL,
-                                   length=60, command=self.update_volume,
-                                   bg=self.colors["bg"], fg="white", 
-                                   highlightthickness=0, sliderlength=15,
-                                   troughcolor="#34495E")
-        self.volume_scale.set(int(self.sound_manager.sfx_volume * 100))
-        self.volume_scale.pack(side=tk.LEFT)
-        
-        # Center game area
-        self.game_area = tk.Frame(self.main_container, bg=self.colors["bg"])
-        self.game_area.pack(expand=True, fill=tk.BOTH, padx=10)
-        
-        
-        print("DEBUG: UI setup complete")
+        # Apply table background to canvas
+        self.update_canvas_table_background()
+    
+    def on_canvas_resize(self, event):
+        """Handle canvas resize to update table background"""
+        if event.widget == self.main_canvas:
+            self.root.after(100, self.update_canvas_table_background)
+    
+    def update_canvas_table_background(self):
+        """Update the table background on canvas"""
+        try:
+            if not hasattr(self, 'main_canvas'):
+                return
+                
+            # Remove old background if exists
+            if 'table_background' in self.canvas_items:
+                self.main_canvas.delete(self.canvas_items['table_background'])
+            
+            # Get canvas size
+            self.main_canvas.update_idletasks()
+            width = self.main_canvas.winfo_width()
+            height = self.main_canvas.winfo_height()
+            
+            if width > 1 and height > 1 and hasattr(self, 'table_source') and self.table_source:
+                # Resize table image to canvas size
+                table_img = self.table_source.resize((width, height), Image.Resampling.LANCZOS)
+                table_photo = ImageTk.PhotoImage(table_img)
+                
+                # Store reference to prevent garbage collection
+                self.table_photo = table_photo
+                
+                # Create background image on canvas
+                self.canvas_items['table_background'] = self.main_canvas.create_image(
+                    width//2, height//2, image=table_photo, anchor=tk.CENTER
+                )
+                
+                print(f"DEBUG: Canvas table background updated: {width}x{height}")
+            
+        except Exception as e:
+            print(f"ERROR: Failed to update canvas table background: {e}")
+    
+    def create_canvas_info_panel(self):
+        """Create info panel using canvas text elements"""
+        if not hasattr(self, 'main_canvas'):
+            return
+            
+        try:
+            canvas_width = self.main_canvas.winfo_width()
+            
+            # Remove old info panel items
+            for key in list(self.canvas_items.keys()):
+                if key.startswith('info_'):
+                    self.main_canvas.delete(self.canvas_items[key])
+                    del self.canvas_items[key]
+            
+            # Create simple text-based info panel at the top
+            info_text = f"Round {self.game.round_number} | Phase: {self.game.current_phase.value}"
+            
+            if hasattr(self.game, 'current_player_idx'):
+                current_player = self.game.players[self.game.current_player_idx]
+                info_text += f" | Current: {current_player.name}"
+            
+            # Create info text on canvas
+            info_id = self.main_canvas.create_text(
+                canvas_width//2, 20,
+                text=info_text,
+                font=('Arial', 14, 'bold'),
+                fill="white",
+                anchor=tk.CENTER
+            )
+            self.canvas_items['info_text'] = info_id
+            
+            print("DEBUG: Canvas info panel created")
+            
+        except Exception as e:
+            print(f"ERROR: Failed to create canvas info panel: {e}")
+            # Fallback - just skip info panel
     
     def has_multiple_human_players(self):
         """Check if game has multiple human players (local multiplayer)"""
@@ -2720,10 +3091,10 @@ Now the real game begins! Use your cards to win tricks and score points.
                                font=self.header_font, 
                                bg=self.colors["success"], 
                                fg="white",
-                               padx=20, 
-                               pady=10,
+                               padx=50, 
+                               pady=30,
                                cursor="hand2")
-        confirm_btn.pack(pady=20)
+        confirm_btn.pack(pady=50)
         
         # Security note
         security_label = tk.Label(confirm_frame, 
@@ -2731,7 +3102,7 @@ Now the real game begins! Use your cards to win tricks and score points.
                                 font=self.normal_font, 
                                 bg=self.colors["bg"], 
                                 fg="gray")
-        security_label.pack(pady=20)
+        security_label.pack(pady=50)
         
         self.waiting_for_turn_confirmation = True
         return False
@@ -2887,9 +3258,21 @@ Now the real game begins! Use your cards to win tricks and score points.
                 self.process_network_messages()
                 self.check_network_connection()
             
-            # Clear game area
-            for widget in self.game_area.winfo_children():
-                widget.destroy()
+            # Clear canvas (if using canvas approach)
+            if hasattr(self, 'main_canvas'):
+                # Canvas approach - clear items
+                for item_name, item_id in list(self.canvas_items.items()):
+                    if item_name != 'table_background':  # Keep table background
+                        self.main_canvas.delete(item_id)
+                        del self.canvas_items[item_name]
+                
+                for widget_name, widget_id in list(self.canvas_widgets.items()):
+                    self.main_canvas.delete(widget_id)
+                    del self.canvas_widgets[widget_name]
+            elif hasattr(self, 'game_area'):
+                # Frame approach - clear widgets
+                for widget in self.game_area.winfo_children():
+                    widget.destroy()
             
             # Clear any existing blocking buttons to prevent stale references
             self.blocking_buttons = {}
@@ -2933,12 +3316,22 @@ Now the real game begins! Use your cards to win tricks and score points.
     
     def update_info_panel(self):
         """Update the information panel"""
-        for widget in self.info_panel.winfo_children():
-            widget.destroy()
+        if hasattr(self, 'main_canvas'):
+            # Canvas approach - create info panel on canvas
+            self.create_canvas_info_panel()
+            return
+        elif hasattr(self, 'info_panel'):
+            # Frame approach - clear and rebuild
+            for widget in self.info_panel.winfo_children():
+                widget.destroy()
+        else:
+            # No info panel available
+            print("DEBUG: No info panel to update")
+            return
         
         # Phase and round info
         info_frame = tk.Frame(self.info_panel, bg=self.colors["bg"])
-        info_frame.pack(side=tk.LEFT, padx=20)
+        info_frame.pack(side=tk.LEFT, padx=50)
         
         tk.Label(info_frame, text=f"Round {self.game.round_number}",
                 font=self.header_font, bg=self.colors["bg"], fg="white").pack()
@@ -2954,7 +3347,7 @@ Now the real game begins! Use your cards to win tricks and score points.
         # Teams display (only for 3+ player games)
         if self.game.teams and self.game.num_players > 2:
             teams_frame = tk.Frame(self.info_panel, bg=self.colors["bg"])
-            teams_frame.pack(side=tk.LEFT, padx=20)
+            teams_frame.pack(side=tk.LEFT, padx=50)
             
             tk.Label(teams_frame, text="Teams:",
                     font=self.header_font, bg=self.colors["bg"], fg="white").pack()
@@ -2977,7 +3370,7 @@ Now the real game begins! Use your cards to win tricks and score points.
         # Team scores (only for 3+ player games)
         if self.game.teams and self.game.num_players > 2:
             score_frame = tk.Frame(self.info_panel, bg=self.colors["bg"])
-            score_frame.pack(side=tk.RIGHT, padx=20)
+            score_frame.pack(side=tk.RIGHT, padx=50)
             
             tk.Label(score_frame, text="Scores:",
                     font=('Arial', 14, 'bold'), bg=self.colors["bg"], fg="white").pack()
@@ -2990,28 +3383,28 @@ Now the real game begins! Use your cards to win tricks and score points.
         
         # Add menu controls to info panel - always available
         menu_frame = tk.Frame(self.info_panel, bg=self.colors["bg"])
-        menu_frame.pack(side=tk.RIGHT, padx=10)
+        menu_frame.pack(side=tk.RIGHT, padx=30)
         
         # Exit to menu button
         exit_btn = tk.Button(menu_frame, text="🏠 Menu", 
                            command=self.exit_to_menu,
                            font=('Arial', 10), bg=self.colors["warning"], fg="white",
-                           borderwidth=1, padx=8, pady=2, cursor="hand2")
-        exit_btn.pack(side=tk.TOP, pady=1)
+                           borderwidth=1, padx=8, pady=5, cursor="hand2")
+        exit_btn.pack(side=tk.TOP, pady=3)
         
         # Save game button
         save_btn = tk.Button(menu_frame, text="💾 Save", 
                            command=self.save_game,
                            font=('Arial', 10), bg=self.colors["success"], fg="white",
-                           borderwidth=1, padx=8, pady=2, cursor="hand2")
-        save_btn.pack(side=tk.TOP, pady=1)
+                           borderwidth=1, padx=8, pady=5, cursor="hand2")
+        save_btn.pack(side=tk.TOP, pady=3)
         
         # Save and Exit button
         save_exit_btn = tk.Button(menu_frame, text="💾 Save & Exit", 
                                 command=self.save_and_exit,
                                 font=('Arial', 10), bg=self.colors["secondary"], fg="white",
-                                borderwidth=1, padx=8, pady=2, cursor="hand2")
-        save_exit_btn.pack(side=tk.TOP, pady=1)
+                                borderwidth=1, padx=8, pady=5, cursor="hand2")
+        save_exit_btn.pack(side=tk.TOP, pady=3)
     
     
     
@@ -3024,56 +3417,612 @@ Now the real game begins! Use your cards to win tricks and score points.
     
     
     def show_blocking_phase(self):
-        """Display the blocking board in center with players around it"""
-        print("DEBUG: show_blocking_phase called")
+        """Display the blocking board in center with players around it using Canvas"""
+        print("DEBUG: show_blocking_phase called - Canvas version")
         
         # Clear any existing blocking buttons to prevent turn overlap
         self.blocking_buttons = {}
         print("DEBUG: Cleared blocking buttons for new turn")
         
-        # Create main table layout using grid
-        table_frame = tk.Frame(self.game_area, bg=self.colors["bg"])
-        table_frame.pack(expand=True, fill=tk.BOTH, padx=20, pady=20)
+        # Ensure canvas is ready
+        if not hasattr(self, 'main_canvas'):
+            print("ERROR: Main canvas not ready")
+            return
         
-        # Configure 5x5 grid for table layout with better weight distribution
-        # Rows: 0=title(small), 1=instruction(small), 2=players+board(main), 3=status(small), 4=bottom(small) 
-        table_frame.grid_rowconfigure(0, weight=0)  # Title - fixed size
-        table_frame.grid_rowconfigure(1, weight=0)  # Instructions - fixed size
-        table_frame.grid_rowconfigure(2, weight=3)  # Main game area - takes most space
-        table_frame.grid_rowconfigure(3, weight=0)  # Status - fixed size
-        table_frame.grid_rowconfigure(4, weight=1)  # Bottom spacing - flexible
+        # Clear previous canvas items (except background and tokens)
+        tokens_before = [k for k in self.canvas_items.keys() if k.startswith('token_')]
+        print(f"DEBUG: Tokens before clearing: {tokens_before}")
         
-        for i in range(5):
-            table_frame.grid_columnconfigure(i, weight=1)
+        for item_name, item_id in list(self.canvas_items.items()):
+            if item_name != 'table_background' and not item_name.startswith('token_'):
+                self.main_canvas.delete(item_id)
+                del self.canvas_items[item_name]
         
-        # Title at top (compact)
-        title_label = tk.Label(table_frame, text="BLOCKING PHASE", 
-                              font=('Arial', 16, 'bold'), bg=self.colors["bg"], fg=self.colors["accent"])
-        title_label.grid(row=0, column=0, columnspan=5, pady=5, sticky="ew")
+        tokens_after = [k for k in self.canvas_items.keys() if k.startswith('token_')]
+        print(f"DEBUG: Tokens after clearing: {tokens_after}")
         
-        # Instructions below title (compact)
-        current_player = self.game.players[self.game.current_player_idx]
-        total_blockable = sum(1 for category in ["start_player", "discard", "trump", "super_trump", "points"]
-                             if self.game.can_block(category))
+        # Clear previous canvas widgets
+        for widget_name, widget_id in list(self.canvas_widgets.items()):
+            self.main_canvas.delete(widget_id)
+            del self.canvas_widgets[widget_name]
         
-        instruction_text = f"{current_player.name}, choose ONE option to block  •  {total_blockable} options remaining"
-        instruction = tk.Label(table_frame, text=instruction_text,
-                              font=('Arial', 10), bg=self.colors["bg"], fg=self.colors["light_text"])
-        instruction.grid(row=1, column=0, columnspan=5, pady=2, sticky="ew")
+        # Table background already set during initial setup - no need to update constantly
         
-        # Position players around the table first
-        self.position_players_around_board(table_frame)
+        # Create the game layout on canvas
+        print("DEBUG: Scheduling canvas blocking layout creation")
+        self.root.after(100, self.create_canvas_blocking_layout)
+    
+    def create_canvas_blocking_layout(self):
+        """Create the blocking phase layout on canvas"""
+        try:
+            if not hasattr(self, 'main_canvas'):
+                return
+            
+            canvas_width = self.main_canvas.winfo_width()
+            canvas_height = self.main_canvas.winfo_height()
+            
+            # Add title text directly on canvas
+            title_id = self.main_canvas.create_text(
+                canvas_width//2, 50, 
+                text="HET! PHASE", 
+                font=('Arial', 24, 'bold'), 
+                fill=self.colors["accent"],
+                anchor=tk.CENTER
+            )
+            self.canvas_items['title'] = title_id
+            
+            # Add instruction text
+            current_player = self.game.players[self.game.current_player_idx]
+            instruction_text = f"🎯 {current_player.name}'s turn to block an option"
+            instruction_id = self.main_canvas.create_text(
+                canvas_width//2, 90,
+                text=instruction_text,
+                font=('Arial', 14),
+                fill="white",
+                anchor=tk.CENTER
+            )
+            self.canvas_items['instruction'] = instruction_id
+            
+            # Create HET board in center
+            self.create_canvas_het_board(canvas_width//2, canvas_height//2)
+            
+            # Position players around the board
+            self.create_canvas_player_areas(canvas_width, canvas_height)
+            
+            # Display player cards
+            self.create_canvas_player_cards(canvas_width, canvas_height)
+            
+            print("DEBUG: Canvas blocking layout created")
+            
+        except Exception as e:
+            print(f"ERROR: Failed to create canvas blocking layout: {e}")
+    
+    def create_canvas_het_board(self, center_x, center_y):
+        """Create HET board image on canvas"""
+        try:
+            if hasattr(self, 'het_board_source') and self.het_board_source:
+                # Resize HET board to appropriate size
+                board_width = 600
+                board_height = 400
+                
+                het_board_img = self.het_board_source.resize((board_width, board_height), Image.Resampling.LANCZOS)
+                het_board_photo = ImageTk.PhotoImage(het_board_img)
+                
+                # Store reference
+                self.het_board_photo = het_board_photo
+                
+                # Create board image on canvas
+                board_id = self.main_canvas.create_image(
+                    center_x, center_y,
+                    image=het_board_photo,
+                    anchor=tk.CENTER
+                )
+                self.canvas_items['het_board'] = board_id
+                
+                print("DEBUG: HET board added to canvas")
+                
+                # Ensure all tokens are visible on top of the board
+                self._raise_all_tokens_to_front()
+                
+                # TODO: Add interactive elements for blocking
+                # For now, create simple clickable areas as rectangles
+                self.create_canvas_blocking_areas(center_x, center_y, board_width, board_height)
+                
+            else:
+                print("DEBUG: HET board not available, creating text placeholder")
+                # Fallback: create text-based board
+                board_id = self.main_canvas.create_rectangle(
+                    center_x - 300, center_y - 200,
+                    center_x + 300, center_y + 200,
+                    fill="#34495E", outline="white", width=2
+                )
+                self.canvas_items['board_bg'] = board_id
+                
+                text_id = self.main_canvas.create_text(
+                    center_x, center_y,
+                    text="HET BOARD\n(Image not loaded)",
+                    font=('Arial', 16, 'bold'),
+                    fill="white",
+                    anchor=tk.CENTER
+                )
+                self.canvas_items['board_text'] = text_id
+                
+        except Exception as e:
+            print(f"ERROR: Failed to create canvas HET board: {e}")
+    
+    def create_canvas_blocking_areas(self, center_x, center_y, board_width, board_height):
+        """Create interactive blocking areas using exact HET board pixel measurements"""
         
-        # Create the central blocking board AFTER players are positioned
-        board_frame = tk.Frame(table_frame, bg=self.colors["panel_bg"], relief=tk.RAISED, bd=3)
-        board_frame.grid(row=2, column=2, padx=20, pady=20, sticky="nsew")
+        # Calculate board position on canvas
+        board_left = center_x - board_width//2
+        board_top = center_y - board_height//2
         
-        # Add player color legend at the top of the board
-        legend_frame = tk.Frame(board_frame, bg=self.colors["panel_bg"])
+        # HET board exact specifications from user:
+        # Full image: 1536x1024 pixels
+        # Grid area: 1430x940 pixels within the image
+        # Grid offsets: left=60px, top=40px, right=46px, bottom=44px
+        
+        # Calculate scale factors from native image to displayed size
+        scale_x = board_width / 1536
+        scale_y = board_height / 1024
+        
+        # Grid boundaries in displayed coordinates  
+        grid_left = board_left + (60 * scale_x)
+        grid_top = board_top + (40 * scale_y)
+        
+        # Exact measurements from user:
+        # Row heights: [200, 240, 190, 160, 130] pixels
+        # Column widths: [140, 230, 230, 230, 230, 250] pixels
+        row_heights = [200, 240, 190, 160, 130]
+        col_widths = [140, 230, 230, 230, 230, 250]
+        
+        # Calculate actual cell positions
+        row_positions = []
+        current_y = grid_top
+        for height in row_heights:
+            row_positions.append((current_y, current_y + height * scale_y))
+            current_y += height * scale_y
+        
+        col_positions = []
+        current_x = grid_left
+        for width in col_widths:
+            col_positions.append((current_x, current_x + width * scale_x))
+            current_x += width * scale_x
+        
+        print(f"DEBUG: Exact grid mapping - scale_x: {scale_x:.3f}, scale_y: {scale_y:.3f}")
+        print(f"DEBUG: Grid origin at ({grid_left:.1f}, {grid_top:.1f})")
+        
+        # Define blocking areas with exact pixel mapping (skip column 0 - descriptions only)
+        blocking_areas = [
+            # Row 0: Start Player (players 1-4 in columns 1-4, skip column 5 for 4-player game)
+            {"category": "start_player", "row": 0, "cells": [
+                {"col": 1, "option": 0}, {"col": 2, "option": 1}, 
+                {"col": 3, "option": 2}, {"col": 4, "option": 3}
+            ]},
+            # Row 1: Cache/Discard (columns 1-5)
+            {"category": "discard", "row": 1, "cells": [
+                {"col": 1, "option": "1 card"}, {"col": 2, "option": "2 cards"},
+                {"col": 3, "option": "2 non-zeros"}, {"col": 4, "option": "Pass 2 right"},
+                {"col": 5, "option": "0 cards"}  # Bypass cache
+            ]},
+            # Row 2: Trump Suit (columns 1-5)  
+            {"category": "trump", "row": 2, "cells": [
+                {"col": 1, "option": "Red"}, {"col": 2, "option": "Blue"},
+                {"col": 3, "option": "Green"}, {"col": 4, "option": "Yellow"},
+                {"col": 5, "option": "HET"}  # No trump
+            ]},
+            # Row 3: Super Trump (columns 1-5)
+            {"category": "super_trump", "row": 3, "cells": [
+                {"col": 1, "option": "Red"}, {"col": 2, "option": "Blue"},
+                {"col": 3, "option": "Green"}, {"col": 4, "option": "Yellow"},
+                {"col": 5, "option": "HET"}  # No super trump
+            ]},
+            # Row 4: Points (columns 1-5)
+            {"category": "points", "row": 4, "cells": [
+                {"col": 1, "option": "1"}, {"col": 2, "option": "2"},
+                {"col": 3, "option": "3"}, {"col": 4, "option": "4"},
+                {"col": 5, "option": "-2"}
+            ]}
+        ]
+        
+        # Create clickable areas for each cell
+        for area in blocking_areas:
+            category = area["category"]
+            row_idx = area["row"]
+            
+            # Get row boundaries
+            y1, y2 = row_positions[row_idx]
+            
+            for cell in area["cells"]:
+                col_idx = cell["col"]
+                option = cell["option"]
+                
+                # Skip if column index is out of range
+                if col_idx >= len(col_positions):
+                    continue
+                
+                # Get column boundaries  
+                x1, x2 = col_positions[col_idx]
+                
+                # Create invisible clickable rectangle
+                area_id = self.main_canvas.create_rectangle(
+                    x1, y1, x2, y2,
+                    fill="", outline="", width=0  # Completely invisible
+                )
+                
+                self.canvas_items[f'{category}_{option}_area'] = area_id
+                
+                # Bind click events
+                self.main_canvas.tag_bind(area_id, '<Button-1>', 
+                    lambda e, cat=category, opt=option: self.canvas_option_clicked(cat, opt, e))
+                
+                print(f"DEBUG: Created clickable area for {category}/{option} at ({x1:.0f},{y1:.0f}) to ({x2:.0f},{y2:.0f})")
+        
+        print("DEBUG: HET board interactive areas created with exact pixel mapping")
+    
+    def create_canvas_player_areas(self, canvas_width, canvas_height):
+        """Create player areas around the canvas"""
+        # Position players around the perimeter
+        positions = [
+            (canvas_width//2, canvas_height - 100),  # Bottom - Player 1 (human)
+            (100, canvas_height//2),                 # Left - Player 2  
+            (canvas_width//2, 100),                  # Top - Player 3
+            (canvas_width - 100, canvas_height//2)   # Right - Player 4
+        ]
+        
+        for i, (x, y) in enumerate(positions[:self.game.num_players]):
+            player = self.game.players[i]
+            
+            # Create player info text
+            player_text = f"{player.name}\nScore: {player.total_score}\n{len(player.cards)} cards"
+            
+            text_id = self.main_canvas.create_text(
+                x, y,
+                text=player_text,
+                font=('Arial', 12, 'bold'),
+                fill=self.colors[f"player{i}"] if i < 4 else "white",
+                anchor=tk.CENTER
+            )
+            self.canvas_items[f'player_{i}_info'] = text_id
+    
+    def canvas_option_clicked(self, category, option, event):
+        """Handle clicks on canvas blocking areas"""
+        print(f"DEBUG: Canvas option clicked - category: {category}, option: {option}")
+        
+        # Call the existing block_option method to handle the actual blocking logic
+        try:
+            self.block_option(category, option)
+            
+            # Add visual blocking token after successful block
+            self.add_blocking_token(category, option, event.x, event.y)
+            
+        except Exception as e:
+            print(f"ERROR: Failed to block option {category}/{option}: {e}")
+            
+            # Show error feedback
+            feedback_id = self.main_canvas.create_text(
+                event.x, event.y - 20,
+                text="CAN'T BLOCK",
+                font=('Arial', 10, 'bold'),
+                fill="red",
+                anchor=tk.CENTER
+            )
+            
+            # Remove feedback after 1 second
+            self.root.after(1000, lambda: self.main_canvas.delete(feedback_id))
+    
+    def add_blocking_token(self, category, option, x, y):
+        """Add a visual blocking token at the specified position"""
+        try:
+            # Get current player color
+            current_player_idx = self.game.current_player_idx
+            player_color = self.colors[f"player{current_player_idx}"]
+            
+            # Check if token already exists
+            token_key = f"token_{category}_{option}"
+            if f'{token_key}_circle' in self.canvas_items:
+                print(f"DEBUG: Token {token_key} already exists, skipping creation")
+                return
+            
+            # Create blocking token (circle with X) - make it more visible
+            token_size = 30  # Larger token
+            
+            # Create circle background with higher z-order
+            circle_id = self.main_canvas.create_oval(
+                x - token_size, y - token_size,
+                x + token_size, y + token_size,
+                fill=player_color, outline="white", width=3
+            )
+            
+            # Add X mark with higher z-order
+            x_id = self.main_canvas.create_text(
+                x, y,
+                text="✗",
+                font=('Arial', 20, 'bold'),
+                fill="white",
+                anchor=tk.CENTER
+            )
+            
+            # Bring tokens to front to ensure they're visible
+            self.main_canvas.tag_raise(circle_id)
+            self.main_canvas.tag_raise(x_id)
+            
+            # Store token items
+            self.canvas_items[f'{token_key}_circle'] = circle_id
+            self.canvas_items[f'{token_key}_x'] = x_id
+            
+            print(f"DEBUG: Added blocking token for {category}/{option} at ({x}, {y}) in color {player_color}")
+            print(f"DEBUG: Total canvas items now: {len(self.canvas_items)}")
+            print(f"DEBUG: Token items: {[k for k in self.canvas_items.keys() if k.startswith('token_')]}")
+            
+        except Exception as e:
+            print(f"ERROR: Failed to add blocking token: {e}")
+    
+    def _raise_all_tokens_to_front(self):
+        """Bring all blocking tokens to the front so they're visible above the board"""
+        try:
+            token_items = [k for k in self.canvas_items.keys() if k.startswith('token_')]
+            if token_items:
+                print(f"DEBUG: Raising {len(token_items)} token items to front")
+                for token_key in token_items:
+                    if token_key in self.canvas_items:
+                        self.main_canvas.tag_raise(self.canvas_items[token_key])
+            else:
+                print("DEBUG: No tokens found to raise")
+        except Exception as e:
+            print(f"ERROR: Failed to raise tokens: {e}")
+    
+    def create_canvas_player_cards(self, canvas_width, canvas_height):
+        """Display player cards on canvas using sprite sheet"""
+        try:
+            print(f"DEBUG: create_canvas_player_cards called, sprite_manager exists: {hasattr(self, 'sprite_manager') and self.sprite_manager is not None}")
+            
+            # Clear old card items but preserve tokens
+            for key in list(self.canvas_items.keys()):
+                if key.startswith('card_') and not key.startswith('card_back_'):
+                    self.main_canvas.delete(self.canvas_items[key])
+                    del self.canvas_items[key]
+            
+            # Show cards for all players
+            self._display_player_cards_human(canvas_width, canvas_height)
+            self._display_player_cards_opponents(canvas_width, canvas_height)
+            
+        except Exception as e:
+            print(f"ERROR: Failed to create canvas player cards: {e}")
+    
+    def _display_player_cards_human(self, canvas_width, canvas_height):
+        """Display human player cards at bottom"""
+        try:
+            human_player_idx = 0  # Assuming Player 1 is human and at bottom
+            if human_player_idx < len(self.game.players):
+                player = self.game.players[human_player_idx]
+                
+                if len(player.cards) > 0:
+                    # Use native sprite resolution for highest quality
+                    card_width = 150   # Native sprite size (or close to it)
+                    card_height = 225  # Native sprite aspect ratio
+                    card_spacing = 45   # Even more overlap for proper fanning
+                    card_y = canvas_height - 180  # Further from bottom for larger cards
+                    
+                    # Center cards properly under the board (canvas center)
+                    total_width = len(player.cards) * card_spacing
+                    start_x = (canvas_width - total_width) // 2 + card_spacing // 2
+                    
+                    for i, card in enumerate(player.cards):
+                        # Calculate card position with proper overlapping fanning effect
+                        x = start_x + i * card_spacing
+                        # Enhanced fanning: create arc effect
+                        num_cards = len(player.cards)
+                        center_index = (num_cards - 1) / 2
+                        distance_from_center = i - center_index
+                        
+                        # Create smoother arc with proper overlap
+                        fan_y_offset = -int(abs(distance_from_center) * 12)  # More pronounced arc
+                        fan_rotation = distance_from_center * 4  # More noticeable rotation
+                        
+                        # Add slight horizontal curvature for better fanning
+                        curve_x_offset = int(distance_from_center * distance_from_center * 2)
+                        
+                        # Use sprite sheet if available
+                        if hasattr(self, 'sprite_manager') and self.sprite_manager:
+                            try:
+                                # Get card at native resolution for best quality
+                                card_image = self.sprite_manager.get_card_image(card, card_width, card_height)
+                                if card_image:
+                                    # Use the image directly or with minimal processing
+                                    card_resized = card_image
+                                    
+                                    # Apply rotation with transparent background
+                                    if abs(fan_rotation) > 0.5:
+                                        # Convert to RGBA for transparency
+                                        card_resized = card_resized.convert('RGBA')
+                                        # Rotate with transparent background
+                                        card_resized = card_resized.rotate(fan_rotation, expand=True, fillcolor=(0, 0, 0, 0))
+                                    
+                                    card_photo = ImageTk.PhotoImage(card_resized)
+                                    
+                                    # Create card image on canvas with enhanced fanning position
+                                    card_id = self.main_canvas.create_image(
+                                        x + curve_x_offset, card_y + fan_y_offset,
+                                        image=card_photo,
+                                        anchor=tk.CENTER
+                                    )
+                                    
+                                    # Store reference to prevent garbage collection
+                                    self.canvas_items[f'card_{i}_photo'] = card_photo
+                                    self.canvas_items[f'card_{i}'] = card_id
+                                    continue
+                            except Exception as e:
+                                print(f"DEBUG: Failed to use sprite for card {card}: {e}")
+                        
+                        # Fallback: Create card rectangle with text and enhanced fanning
+                        final_x = x + curve_x_offset
+                        final_y = card_y + fan_y_offset
+                        
+                        card_id = self.main_canvas.create_rectangle(
+                            final_x - card_width//2, final_y - card_height//2,
+                            final_x + card_width//2, final_y + card_height//2,
+                            fill="white", outline="black", width=2
+                        )
+                        
+                        # Add card text with enhanced fanning offset
+                        card_text = f"{card.value}\n{card.suit.value}"
+                        text_id = self.main_canvas.create_text(
+                            final_x, final_y,
+                            text=card_text,
+                            font=('Arial', 16, 'bold'),  # Larger font for bigger cards
+                            fill=self.colors.get(card.suit, "black"),
+                            anchor=tk.CENTER
+                        )
+                        
+                        self.canvas_items[f'card_{i}'] = card_id
+                        self.canvas_items[f'card_text_{i}'] = text_id
+                    
+                    print(f"DEBUG: Displayed {len(player.cards)} cards for human player using sprites")
+                
+        except Exception as e:
+            print(f"ERROR: Failed to display human player cards: {e}")
+    
+    def _display_player_cards_opponents(self, canvas_width, canvas_height):
+        """Display opponent cards as card backs around the edges"""
+        try:
+            if len(self.game.players) < 2:
+                return
+                
+            card_back_width = 40
+            card_back_height = 60
+            
+            # Position cards for other players (show as card backs)
+            for i, player in enumerate(self.game.players):
+                if i == 0:  # Skip human player
+                    continue
+                    
+                if len(player.cards) == 0:
+                    continue
+                
+                # Position based on player index
+                if i == 1:  # Left player
+                    x = 50
+                    y = canvas_height // 2
+                    card_spacing = 0
+                    for j in range(len(player.cards)):
+                        card_y = y + (j - len(player.cards)//2) * 35
+                        self._create_card_back(x, card_y, card_back_width, card_back_height, f"opp_{i}_{j}")
+                        
+                elif i == 2:  # Top player
+                    y = 50
+                    x = canvas_width // 2
+                    for j in range(len(player.cards)):
+                        card_x = x + (j - len(player.cards)//2) * 35
+                        self._create_card_back(card_x, y, card_back_width, card_back_height, f"opp_{i}_{j}")
+                        
+                elif i == 3:  # Right player
+                    x = canvas_width - 50
+                    y = canvas_height // 2
+                    for j in range(len(player.cards)):
+                        card_y = y + (j - len(player.cards)//2) * 35
+                        self._create_card_back(x, card_y, card_back_width, card_back_height, f"opp_{i}_{j}")
+                        
+            print(f"DEBUG: Displayed opponent cards for {len(self.game.players) - 1} players")
+            
+        except Exception as e:
+            print(f"ERROR: Failed to display opponent cards: {e}")
+    
+    def _create_card_back(self, x, y, width, height, card_key):
+        """Create a card back image using sprite sheet"""
+        try:
+            # Use sprite sheet card back if available
+            if hasattr(self, 'sprite_manager') and self.sprite_manager:
+                try:
+                    back_image = self.sprite_manager.get_card_back_image(width, height)
+                    if back_image:
+                        # Convert PIL Image to PhotoImage
+                        back_photo = ImageTk.PhotoImage(back_image)
+                        
+                        # Create card back image on canvas
+                        card_id = self.main_canvas.create_image(
+                            x, y,
+                            image=back_photo,
+                            anchor=tk.CENTER
+                        )
+                        
+                        # Store reference to prevent garbage collection
+                        self.canvas_items[f'card_back_{card_key}'] = card_id
+                        self.canvas_items[f'card_back_{card_key}_photo'] = back_photo
+                        return
+                except Exception as e:
+                    print(f"DEBUG: Failed to use sprite for card back: {e}")
+            
+            # Fallback: Create card back rectangle
+            card_id = self.main_canvas.create_rectangle(
+                x - width//2, y - height//2,
+                x + width//2, y + height//2,
+                fill="#2E5090", outline="white", width=1
+            )
+            
+            # Add card back pattern
+            text_id = self.main_canvas.create_text(
+                x, y,
+                text="HET",
+                font=('Arial', 8, 'bold'),
+                fill="white",
+                anchor=tk.CENTER
+            )
+            
+            self.canvas_items[f'card_back_{card_key}'] = card_id
+            self.canvas_items[f'card_back_text_{card_key}'] = text_id
+            
+        except Exception as e:
+            print(f"ERROR: Failed to create card back: {e}")
+        
+    def create_het_board_image(self, board_frame):
+        """Create HET board using the HETBoard.png image"""
+        try:
+            print("DEBUG: Creating HET board image")
+            
+            # Size the board appropriately
+            board_width = 600
+            board_height = 400
+            
+            # Resize HET board image
+            het_board_img = self.het_board_source.resize((board_width, board_height), Image.Resampling.LANCZOS)
+            het_board_photo = ImageTk.PhotoImage(het_board_img)
+            
+            # Create label to display the HET board image
+            board_label = tk.Label(board_frame, image=het_board_photo)
+            board_label.image = het_board_photo  # Keep reference
+            board_label.pack(expand=True, fill=tk.BOTH)
+            
+            # TODO: Add interactive elements on top of the board image
+            # For now, create a simple overlay for testing
+            overlay_frame = tk.Frame(board_frame, bg='')
+            overlay_frame.place(x=0, y=0, relwidth=1.0, relheight=1.0)
+            
+            print("DEBUG: HET board image created successfully")
+            
+        except Exception as e:
+            print(f"ERROR: Failed to create HET board image: {e}")
+            # Fall back to code-drawn board
+            self.create_code_drawn_board(board_frame)
+    
+    def create_code_drawn_board(self, board_frame):
+        """Create the traditional code-drawn blocking board"""
+        # Configure board_frame grid
+        board_frame.grid_rowconfigure(0, weight=0)  # Legend - fixed size
+        for i in range(1, 6):  # Category rows 1-5
+            board_frame.grid_rowconfigure(i, weight=1)  # Equal weight for categories
+        
+        # Configure columns - category labels and option buttons  
+        board_frame.grid_columnconfigure(0, weight=0, minsize=120)  # Category labels - fixed width
+        for i in range(1, 7):  # Option columns 1-6
+            board_frame.grid_columnconfigure(i, weight=1, minsize=100)  # Equal weight for options
+        
+        # Add player color legend at the top of the board - transparent for table background
+        legend_frame = tk.Frame(board_frame)
         legend_frame.grid(row=0, column=0, columnspan=6, pady=(10, 5), sticky="ew")
         
         legend_title = tk.Label(legend_frame, text="Player Colors:", 
-                               font=('Arial', 9, 'bold'), bg=self.colors["panel_bg"], fg=self.colors["light_text"])
+                               font=('Arial', 9, 'bold'), fg=self.colors["light_text"])
         legend_title.pack(side=tk.LEFT, padx=(10, 5))
         
         for i in range(self.game.num_players):
@@ -3082,7 +4031,7 @@ Now the real game begins! Use your cards to win tricks and score points.
             
             # Create colored indicator for each player
             color_frame = tk.Frame(legend_frame, bg=player_color, width=12, height=12, relief=tk.RAISED, bd=1)
-            color_frame.pack(side=tk.LEFT, padx=2)
+            color_frame.pack(side=tk.LEFT, padx=5)
             color_frame.pack_propagate(False)
             
             # Add X symbol in the color
@@ -3092,7 +4041,7 @@ Now the real game begins! Use your cards to win tricks and score points.
             
             # Player name next to color
             name_label = tk.Label(legend_frame, text=player.name, 
-                                 font=('Arial', 8), bg="#34495E", fg="white")
+                                 font=('Arial', 8), fg="white")
             name_label.pack(side=tk.LEFT, padx=(0, 8))
         
         # Blocking grid
@@ -3107,63 +4056,65 @@ Now the real game begins! Use your cards to win tricks and score points.
         self.blocking_buttons = {}
         
         for row, (label, category) in enumerate(categories):
-            # Category label (offset by 1 for legend)
-            tk.Label(board_frame, text=label, font=('Arial', 12),
-                    bg=self.colors["bg"], fg="white", width=15).grid(row=row+1, column=0, padx=10, pady=5, sticky="w")
-            
-            # Options
-            options = self.game.blocking_board[category]
-            blocked_key = f"{category}_blocked"
-            blocked = self.game.blocking_board.get(blocked_key, [])
-            
-            col = 1
-            for option in options:
-                if category in ["trump", "super_trump"] and isinstance(option, Suit):
-                    btn_text = option.value
-                    btn_color = self.colors[option]
-                elif category in ["trump", "super_trump"] and option == "Njet":
-                    btn_text = "Njet" if category == "trump" else "Njet"
-                    btn_color = "#2C3E50"  # Dark blue-gray for Njet
-                elif category == "start_player":
-                    btn_text = self.game.players[option].name
-                    btn_color = self.colors["card_bg"]
-                else:
-                    btn_text = str(option)
-                    btn_color = self.colors["card_bg"]
+            try:
+                print(f"DEBUG: Processing category {category} ({label})")
+                # Category label (offset by 1 for legend)
+                tk.Label(board_frame, text=label, font=('Arial', 12),
+                        bg=self.colors["panel_bg"], fg="white", width=15).grid(row=row+1, column=0, padx=30, pady=5, sticky="w")
                 
-                btn = tk.Button(board_frame, text=btn_text, width=12,
-                               font=('Arial', 10))
+                # Options
+                options = self.game.blocking_board[category]
+                blocked_key = f"{category}_blocked"
+                blocked = self.game.blocking_board.get(blocked_key, [])
+                print(f"DEBUG: Category {category} has {len(options)} options")
                 
-                if option in blocked:
-                    # Get who blocked this option and use their color
-                    blocking_player = self.game.get_blocking_player(category, option)
-                    if blocking_player is not None:
-                        player_color = self.colors[f"player{blocking_player}"]
-                        player_name = self.game.players[blocking_player].name
-                        
-                        # Create a frame to hold the colored X mark instead of using disabled button
-                        btn_frame = tk.Frame(board_frame, bg=player_color, width=12*8, height=25, relief=tk.SUNKEN, bd=2)
-                        btn_frame.grid(row=row+1, column=col, padx=2, pady=2, sticky="nsew")
-                        btn_frame.pack_propagate(False)
-                        
-                        # Add the X mark as a label inside the frame
-                        x_label = tk.Label(btn_frame, text=f"✗ {btn_text}", 
-                                          bg=player_color, fg="white", font=('Arial', 10, 'bold'))
-                        x_label.pack(expand=True, fill=tk.BOTH)
-                        
-                        # Store reference for cleanup
-                        if category not in self.blocking_buttons:
-                            self.blocking_buttons[category] = {}
-                        self.blocking_buttons[category][option] = btn_frame
-                        
-                        col += 1
-                        continue  # Skip the normal button creation
+                col = 1
+                for option in options:
+                    if category in ["trump", "super_trump"] and isinstance(option, Suit):
+                        btn_text = option.value
+                        btn_color = self.colors[option]
+                    elif category in ["trump", "super_trump"] and option == "HET":
+                        btn_text = "HET"
+                        btn_color = "#2C3E50"  # Dark blue-gray for HET
+                    elif category == "start_player":
+                        btn_text = self.game.players[option].name
+                        btn_color = self.colors["card_bg"]
                     else:
-                        # Fallback to old style if no player info
-                        btn.configure(bg="#95A5A6", fg="white", state=tk.NORMAL,
-                                     text=f"❌ {btn_text}",
-                                     relief=tk.SUNKEN,
-                                     command=lambda: None)
+                        btn_text = str(option)
+                        btn_color = self.colors["card_bg"]
+                    
+                    btn = tk.Button(board_frame, text=btn_text, width=12,
+                                   font=('Arial', 10))
+                    
+                    if option in blocked:
+                        # Get who blocked this option and use their color
+                        blocking_player = self.game.get_blocking_player(category, option)
+                        if blocking_player is not None:
+                            player_color = self.colors[f"player{blocking_player}"]
+                            
+                            # Create a frame to hold the colored X mark
+                            btn_frame = tk.Frame(board_frame, bg=player_color, width=12*8, height=25, relief=tk.SUNKEN, bd=2)
+                            btn_frame.grid(row=row+1, column=col, padx=5, pady=5, sticky="nsew")
+                            btn_frame.pack_propagate(False)
+                            
+                            # Add the X mark as a label inside the frame
+                            x_label = tk.Label(btn_frame, text=f"✗ {btn_text}", 
+                                              bg=player_color, fg="white", font=('Arial', 10, 'bold'))
+                            x_label.pack(expand=True, fill=tk.BOTH)
+                            
+                            # Store reference for cleanup
+                            if category not in self.blocking_buttons:
+                                self.blocking_buttons[category] = {}
+                            self.blocking_buttons[category][option] = btn_frame
+                            
+                            col += 1
+                            continue  # Skip the normal button creation
+                        else:
+                            # Fallback to old style if no player info
+                            btn.configure(bg="#95A5A6", fg="white", state=tk.NORMAL,
+                                         text=f"❌ {btn_text}",
+                                         relief=tk.SUNKEN,
+                                         command=lambda: None)
                 else:
                     # Check if this row would have only one option left after blocking
                     available_in_category = [opt for opt in options if opt not in blocked]
@@ -3173,12 +4124,10 @@ Now the real game begins! Use your cards to win tricks and score points.
                         # Can still block this option
                         current_player = self.game.players[self.game.current_player_idx]
                         
-                        # CRITICAL FIX: Only enable buttons if it's the current human player's turn
-                        # AND they haven't just taken a turn (prevent multiple clicks)
+                        # Only enable buttons if it's the current human player's turn
                         if (current_player.is_human and 
                             self.game.current_phase == Phase.BLOCKING and
                             not getattr(self, '_blocking_turn_in_progress', False)):
-                            # Only enable buttons for the current human player
                             btn.configure(bg=btn_color, fg="black", state=tk.NORMAL,
                                          command=lambda c=category, o=option: self.block_option(c, o))
                         else:
@@ -3189,39 +4138,35 @@ Now the real game begins! Use your cards to win tricks and score points.
                         btn.configure(bg="#F1C40F", fg="#2C3E50", state=tk.DISABLED, 
                                      text=f"⭐ {btn_text}")
                 
-                btn.grid(row=row+1, column=col, padx=2, pady=2)
+                btn.grid(row=row+1, column=col, padx=5, pady=5)
                 
                 if category not in self.blocking_buttons:
                     self.blocking_buttons[category] = {}
                 self.blocking_buttons[category][option] = btn
                 
                 col += 1
+                    
+            except Exception as e:
+                print(f"DEBUG: Error processing category {category}: {e}")
+                import traceback
+                traceback.print_exc()
+                continue
         
-        # AI turn handling - Note: AI turns are now scheduled from next_blocking_turn() 
-        # to avoid duplicate scheduling and ensure proper sequencing
+        # Check if current player is AI and schedule their turn
         current_player = self.game.players[self.game.current_player_idx]
-        print(f"DEBUG: *** AI TURN SCHEDULING CHECK ***")
-        print(f"DEBUG: Current player {self.game.current_player_idx} ({current_player.name}) is_human={current_player.is_human}")
-        print(f"DEBUG: Game phase: {self.game.current_phase}")
-        
         if not current_player.is_human:
-            print(f"DEBUG: Current player is AI - scheduling turn immediately")
-            # Show thinking indicator immediately
+            print(f"DEBUG: Current player is AI, scheduling AI turn")
             self.show_ai_thinking(self.game.current_player_idx, "blocking")
-            # Schedule AI turn for initial game start and when UI is ready
-            # Use a flag to prevent duplicate scheduling
-            if not hasattr(self, '_ai_turn_scheduled') or not self._ai_turn_scheduled:
-                self._ai_turn_scheduled = True
-                def ai_turn_wrapper():
-                    self._ai_turn_scheduled = False
+            def ai_turn_wrapper():
+                if hasattr(self, 'game') and self.game.current_phase == Phase.BLOCKING:
                     self.ai_blocking_turn()
-                self.root.after(250, ai_turn_wrapper)
+            self.root.after(250, ai_turn_wrapper)
         else:
             print(f"DEBUG: Current player {self.game.current_player_idx} ({current_player.name}) is human, waiting for input")
-            # Hide any lingering AI thinking indicators when it's human turn
             self.hide_ai_thinking()
         
         print("DEBUG: blocking board created with buttons")
+    
     
     def show_discard_phase_with_table(self):
         """Display discard phase using table layout"""
@@ -3271,8 +4216,8 @@ Now the real game begins! Use your cards to win tricks and score points.
                 self.turn_confirmed = True
         
         # Create main table layout using grid
-        table_frame = tk.Frame(self.game_area, bg=self.colors["bg"])
-        table_frame.pack(expand=True, fill=tk.BOTH, padx=20, pady=20)
+        table_frame = tk.Frame(self.game_area)
+        table_frame.pack(expand=True, fill=tk.BOTH, padx=50, pady=50)
         
         # Configure grid for table layout
         table_frame.grid_rowconfigure(0, weight=0)  # Title
@@ -3293,18 +4238,18 @@ Now the real game begins! Use your cards to win tricks and score points.
         instruction_text = f"{current_player.name}, select {cards_needed} cards to discard"
         instruction = tk.Label(table_frame, text=instruction_text,
                               font=('Arial', 10), bg=self.colors["bg"], fg="white")
-        instruction.grid(row=1, column=0, columnspan=5, pady=2, sticky="ew")
+        instruction.grid(row=1, column=0, columnspan=5, pady=5, sticky="ew")
         
-        # Central discard area (where blocking board was)
-        discard_frame = tk.Frame(table_frame, bg=self.colors["secondary"], relief=tk.RAISED, bd=3)
-        discard_frame.grid(row=2, column=2, padx=20, pady=20, sticky="nsew")
+        # Central discard area (where blocking board was) - transparent for table background
+        discard_frame = tk.Frame(table_frame, relief=tk.RAISED, bd=3)
+        discard_frame.grid(row=2, column=2, padx=50, pady=50, sticky="nsew")
         
-        tk.Label(discard_frame, text=f"Discard Phase: {discard_option}", 
-                font=('Arial', 14, 'bold'), bg=self.colors["secondary"], fg="white").pack(pady=15)
+        tk.Label(discard_frame, text=f"Cache Phase: {discard_option}", 
+                font=('Arial', 14, 'bold'), fg="white").pack(pady=35)
         
         # CRITICAL ADDITION: Show game parameters for strategic decision making
-        params_frame = tk.Frame(discard_frame, bg=self.colors["secondary"])
-        params_frame.pack(pady=10)
+        params_frame = tk.Frame(discard_frame)
+        params_frame.pack(pady=30)
         
         # Trump information
         trump_suit = self.game.game_params.get("trump", "None")
@@ -3331,13 +4276,13 @@ Now the real game begins! Use your cards to win tricks and score points.
         selected_count = len(self.discards_made.get(self.current_discard_player, []))
         
         tk.Label(discard_frame, text=f"Selected: {selected_count}/{cards_needed}", 
-                font=('Arial', 12), bg=self.colors["secondary"], fg="white").pack(pady=10)
+                font=('Arial', 12), bg=self.colors["secondary"], fg="white").pack(pady=30)
         
         # Add confirm button if enough cards selected
         if selected_count == cards_needed:
             tk.Button(discard_frame, text="Confirm Discards", 
                      font=('Arial', 12), bg="#2ECC71", fg="white",
-                     command=self.confirm_discards).pack(pady=10)
+                     command=self.confirm_discards).pack(pady=30)
         
         # Handle AI players automatically
         if not current_player.is_human:
@@ -3361,9 +4306,12 @@ Now the real game begins! Use your cards to win tricks and score points.
         if self.game.teams and self.game.num_players > 2:
             self.update_real_time_team_scores()
         
-        # Create main table layout using grid
-        table_frame = tk.Frame(self.game_area, bg=self.colors["bg"])
-        table_frame.pack(expand=True, fill=tk.BOTH, padx=20, pady=20)
+        # Apply table background to game_area for better coverage  
+        # Delay this until after all UI elements are created
+        self.root.after(100, lambda: self.setup_table_background(self.game_area))
+        
+        # Use game_area directly for UI elements - no covering frames
+        table_frame = self.game_area
         
         # Configure grid for table layout
         table_frame.grid_rowconfigure(0, weight=0)  # Title
@@ -3377,7 +4325,7 @@ Now the real game begins! Use your cards to win tricks and score points.
         
         # Title
         title_label = tk.Label(table_frame, text="TRICK TAKING", 
-                              font=('Arial', 16, 'bold'), bg=self.colors["bg"], fg="#2ECC71")
+                              font=('Arial', 16, 'bold'), fg="#2ECC71")
         title_label.grid(row=0, column=0, columnspan=5, pady=5, sticky="ew")
         
         # Instructions 
@@ -3388,12 +4336,12 @@ Now the real game begins! Use your cards to win tricks and score points.
             instruction_text = f"{current_player.name} is playing..."
             
         instruction = tk.Label(table_frame, text=instruction_text,
-                              font=('Arial', 10), bg=self.colors["bg"], fg="white")
-        instruction.grid(row=1, column=0, columnspan=5, pady=2, sticky="ew")
+                              font=('Arial', 10), fg="white")
+        instruction.grid(row=1, column=0, columnspan=5, pady=5, sticky="ew")
         
-        # Central trick area
-        trick_frame = tk.Frame(table_frame, bg="#34495E", relief=tk.RAISED, bd=3)
-        trick_frame.grid(row=2, column=2, padx=20, pady=20, sticky="nsew")
+        # Create trick area directly in the center of the table - consistent background
+        trick_frame = tk.Frame(table_frame)
+        trick_frame.grid(row=2, column=2, padx=100, pady=100, sticky="nsew")
         
         # Store trick center position for animation (approximate center of the trick_frame)
         # We'll update this after the widget is placed
@@ -3410,13 +4358,13 @@ Now the real game begins! Use your cards to win tricks and score points.
         
         info_label = tk.Label(trick_frame, 
                              text=f"Trump: {trump_text}  •  Super: {super_trump_text}  •  Points: {points}",
-                             font=('Arial', 10), bg="#34495E", fg="white")
+                             font=('Arial', 10), fg="white")
         info_label.pack(pady=5)
         
         # Current trick display
         trick_label = tk.Label(trick_frame, text="Current Trick", 
-                              font=('Arial', 14, 'bold'), bg="#34495E", fg="white")
-        trick_label.pack(pady=10)
+                              font=('Arial', 14, 'bold'), fg="white")
+        trick_label.pack(pady=30)
         
         # Show played cards in the trick
         if self.game.current_trick:
@@ -3426,7 +4374,7 @@ Now the real game begins! Use your cards to win tricks and score points.
             # Remove the "Trick Complete" message as requested by user
             
             cards_frame = tk.Frame(trick_frame, bg="#34495E")
-            cards_frame.pack(pady=10)
+            cards_frame.pack(pady=30)
             
             for i, (player_idx, card) in enumerate(self.game.current_trick):
                 # Create a container for each card with player info
@@ -3441,7 +4389,7 @@ Now the real game begins! Use your cards to win tricks and score points.
                 
                 # The card
                 card_widget = self.create_card_widget(card_container, card, small=True)
-                card_widget.pack(pady=2)
+                card_widget.pack(pady=5)
         
         # Handle AI turn with enhanced validation
         if not current_player.is_human:
@@ -3509,9 +4457,9 @@ Now the real game begins! Use your cards to win tricks and score points.
             player = self.game.players[player_idx]
             row, col, pos = positions[i]
             
-            # Create player area
-            player_frame = tk.Frame(table_frame, bg=self.colors["bg"], relief=tk.RIDGE, bd=2)
-            player_frame.grid(row=row, column=col, padx=10, pady=10, sticky="nsew")
+            # Create player area - use consistent background that table can cover
+            player_frame = tk.Frame(table_frame)
+            player_frame.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
             
             # Store player frame for animation positioning
             self.player_frames[player_idx] = player_frame
@@ -3527,20 +4475,20 @@ Now the real game begins! Use your cards to win tricks and score points.
             font_weight = 'bold' if is_current else 'normal'
             
             tk.Label(player_frame, text=player.name, font=('Arial', 12, font_weight),
-                    bg=self.colors["bg"], fg=player_color).pack(pady=2)
+                    fg=player_color).pack(pady=5)
             
             # Always show total score
             tk.Label(player_frame, text=f"Score: {player.total_score}", font=('Arial', 10, 'bold'),
-                    bg=self.colors["bg"], fg=self.colors["accent"]).pack()
+                    fg=self.colors["accent"]).pack()
             
             player_type = "Human" if player.is_human else "AI"
             tk.Label(player_frame, text=player_type, font=('Arial', 8),
-                    bg=self.colors["bg"], fg="gray").pack()
+                    fg="gray").pack()
             
             # Show compact card count only
             if not player.is_human:
                 tk.Label(player_frame, text=f"{len(player.cards)} cards",
-                        font=('Arial', 8), bg=self.colors["bg"], fg="gray").pack()
+                        font=('Arial', 8), fg="gray").pack()
             
             # Show actual cards for human players (with turn confirmation for local multiplayer)
             should_show_cards = (player.is_human and len(player.cards) > 0 and
@@ -3548,59 +4496,70 @@ Now the real game begins! Use your cards to win tricks and score points.
                                  (player_idx == self.game.current_player_idx and self.turn_confirmed)))
             
             if should_show_cards:
-                cards_frame = tk.Frame(player_frame, bg=self.colors["bg"])
-                cards_frame.pack(pady=2, expand=True, fill=tk.BOTH)
+                cards_frame = tk.Frame(player_frame)
+                cards_frame.pack(pady=5, expand=True, fill=tk.BOTH)
                 
-                # Show all cards in rows of 5
-                cards_per_row = 5
-                total_cards = len(player.cards)
-                
-                for row_idx in range((total_cards + cards_per_row - 1) // cards_per_row):
-                    row_frame = tk.Frame(cards_frame, bg=self.colors["bg"])
-                    row_frame.pack()
+                # Use fanned layout for better space efficiency
+                try:
+                    # Determine orientation based on position
+                    if pos in ["LEFT", "RIGHT"]:
+                        orientation = "vertical"
+                    else:
+                        orientation = "horizontal"
                     
-                    start_idx = row_idx * cards_per_row
-                    end_idx = min(start_idx + cards_per_row, total_cards)
+                    # Check if cards should be clickable
+                    clickable = (player.is_human and is_current and phase in ["discard", "trick_taking"])
                     
-                    for card_idx in range(start_idx, end_idx):
-                        card = player.cards[card_idx]
-                        # Make cards clickable for current player during interactive phases
-                        if player.is_human and is_current and phase in ["discard", "trick_taking"]:
-                            card_widget = self.create_card_widget(row_frame, card, clickable=True, small=True, player_idx=player_idx)
-                        else:
-                            card_widget = self.create_card_widget(row_frame, card, small=True)
-                        card_widget.pack(side=tk.LEFT, padx=1)
+                    # Create fanned layout
+                    self.create_fanned_card_layout(cards_frame, player.cards, player_idx,
+                                                 orientation=orientation, clickable=clickable, small=True)
+                except Exception as e:
+                    print(f"ERROR: Failed to create fanned layout: {e}")
+                    # Fallback: show card count
+                    tk.Label(cards_frame, text=f"{len(player.cards)} cards", 
+                            font=('Arial', 10), bg=self.colors["bg"], fg="white").pack()
             
             elif player.is_human and len(player.cards) > 0 and not should_show_cards:
                 # Show card backs for hidden human players (local multiplayer)
                 backs_frame = tk.Frame(player_frame, bg=self.colors["bg"])
-                backs_frame.pack(pady=2)
+                backs_frame.pack(pady=5)
                 
-                # Show limited card backs with "HIDDEN" indicator
-                num_backs = min(3, len(player.cards))
-                for j in range(num_backs):
-                    card_back = self.create_card_back(backs_frame, small=True)
-                    card_back.pack(side=tk.LEFT, padx=1)
-                
-                # Add hidden indicator with card count (open information)
-                card_count_text = f"🔒 HIDDEN ({len(player.cards)} cards)"
-                tk.Label(backs_frame, text=card_count_text, 
-                        font=('Arial', 7, 'bold'), bg=self.colors["bg"], fg="gray").pack()
+                try:
+                    # Use fanned card backs
+                    orientation = "vertical" if pos in ["LEFT", "RIGHT"] else "horizontal"
+                    num_backs = min(3, len(player.cards))
+                    self.create_fanned_card_backs(backs_frame, num_backs, orientation=orientation, small=True)
+                    
+                    # Add hidden indicator with card count
+                    card_count_text = f"🔒 HIDDEN ({len(player.cards)} cards)"
+                    tk.Label(backs_frame, text=card_count_text, 
+                            font=('Arial', 7, 'bold'), bg=self.colors["bg"], fg="gray").pack()
+                except Exception as e:
+                    print(f"Error creating fanned card backs: {e}")
+                    # Fallback
+                    tk.Label(backs_frame, text=f"🔒 {len(player.cards)} cards", 
+                            font=('Arial', 8), bg=self.colors["bg"], fg="gray").pack()
             
             elif not player.is_human and len(player.cards) > 0:
-                # Show card backs for AI players
+                # Show card backs for AI players using fanned layout
                 backs_frame = tk.Frame(player_frame, bg=self.colors["bg"])
-                backs_frame.pack(pady=2)
+                backs_frame.pack(pady=5)
                 
-                # Show 3-4 card backs
-                num_backs = min(4, len(player.cards))
-                for j in range(num_backs):
-                    card_back = self.create_card_back(backs_frame, small=True)
-                    card_back.pack(side=tk.LEFT, padx=1)
-                
-                if len(player.cards) > 4:
-                    tk.Label(backs_frame, text=f"+{len(player.cards)-4}",
-                            font=('Arial', 6), bg=self.colors["bg"], fg="gray").pack()
+                try:
+                    # Use fanned card backs based on position
+                    orientation = "vertical" if pos in ["LEFT", "RIGHT"] else "horizontal"
+                    num_backs = min(4, len(player.cards))
+                    self.create_fanned_card_backs(backs_frame, num_backs, orientation=orientation, small=True)
+                    
+                    # Show overflow count if needed
+                    if len(player.cards) > 4:
+                        tk.Label(backs_frame, text=f"+{len(player.cards)-4}",
+                                font=('Arial', 6), bg=self.colors["bg"], fg="gray").pack()
+                except Exception as e:
+                    print(f"Error creating AI fanned card backs: {e}")
+                    # Fallback
+                    tk.Label(backs_frame, text=f"{len(player.cards)} cards", 
+                            font=('Arial', 8), bg=self.colors["bg"], fg="gray").pack()
 
 
     def block_option(self, category, option, player_idx=None):
@@ -3694,6 +4653,14 @@ Now the real game begins! Use your cards to win tricks and score points.
                         # Not a button widget, skip it
                         pass
         
+        # Tutorial progression: auto-advance after human player makes their first blocking move
+        if getattr(self, 'tutorial_mode', False) and self.tutorial_step == 3:
+            print("DEBUG: Tutorial mode - auto-advancing after first blocking move")
+            # Move to next tutorial step (blocking practice)
+            self.tutorial_step = 4
+            # Update tutorial overlay to show blocking practice guidance
+            self.root.after(1000, lambda: self.add_tutorial_overlay("blocking_practice"))
+        
         print(f"DEBUG: About to call next_blocking_turn from block_option")
         
         # Next player
@@ -3719,7 +4686,9 @@ Now the real game begins! Use your cards to win tricks and score points.
                     print(f"ERROR in immediate AI turn: {e}")
                     import traceback
                     traceback.print_exc()
-            self.root.after(150, immediate_ai_turn)
+            # Tutorial mode: faster AI turns
+            delay = 50 if getattr(self, 'tutorial_mode', False) else 150
+            self.root.after(delay, immediate_ai_turn)
     
     def ai_blocking_turn(self):
         """Handle AI blocking turn with smart strategy"""
@@ -3798,7 +4767,9 @@ Now the real game begins! Use your cards to win tricks and score points.
             # Move to next player after a short delay
             # Note: We don't update the button directly here since next_blocking_turn 
             # will call update_display() which recreates the entire UI
-            self.root.after(100, self.next_blocking_turn)
+            # Tutorial mode: faster transitions
+            delay = 50 if getattr(self, 'tutorial_mode', False) else 100
+            self.root.after(delay, self.next_blocking_turn)
             
         except Exception as e:
             print(f"ERROR in ai_blocking_turn: {e}")
@@ -3851,9 +4822,15 @@ Now the real game begins! Use your cards to win tricks and score points.
         
         if total_blockable == 0:
             # Blocking phase complete - each row has exactly one option left
-            print("DEBUG: === BLOCKING PHASE COMPLETE ===")
+            print("DEBUG: === HET! PHASE COMPLETE ===")
             print("DEBUG: Finalizing parameters and transitioning to next phase")
             self.game.finalize_parameters()
+            
+            # Tutorial progression: auto-advance to team selection tutorial
+            if getattr(self, 'tutorial_mode', False):
+                print("DEBUG: Tutorial mode - auto-advancing to team selection")
+                self.tutorial_step = 5
+                self.root.after(1000, lambda: self.add_tutorial_overlay("team_selection"))
             
             # Move to team selection phase
             if self.game.num_players >= 3:
@@ -3969,9 +4946,9 @@ Now the real game begins! Use your cards to win tricks and score points.
     
     def show_blocking_board_compact(self, parent, row, column):
         """Display a compact read-only version of the blocking board showing results"""
-        # Create the board frame
-        board_frame = tk.Frame(parent, bg=self.colors["panel_bg"], relief=tk.RAISED, bd=3)
-        board_frame.grid(row=row, column=column, padx=10, pady=10, sticky="nsew")
+        # Create the board frame - transparent for table background
+        board_frame = tk.Frame(parent, relief=tk.RAISED, bd=3)
+        board_frame.grid(row=row, column=column, padx=30, pady=30, sticky="nsew")
         
         # Title
         tk.Label(board_frame, text="BLOCKING RESULTS", font=('Arial', 14, 'bold'), 
@@ -3991,7 +4968,7 @@ Now the real game begins! Use your cards to win tricks and score points.
             
             # Create colored indicator for each player
             color_frame = tk.Frame(legend_frame, bg=player_color, width=12, height=12, relief=tk.RAISED, bd=1)
-            color_frame.pack(side=tk.LEFT, padx=2)
+            color_frame.pack(side=tk.LEFT, padx=5)
             color_frame.pack_propagate(False)
             
             # Add X symbol in the color
@@ -4001,7 +4978,7 @@ Now the real game begins! Use your cards to win tricks and score points.
             
             # Player name next to color
             name_label = tk.Label(legend_frame, text=player.name, 
-                                 font=('Arial', 8), bg="#34495E", fg="white")
+                                 font=('Arial', 8), fg="white")
             name_label.pack(side=tk.LEFT, padx=(0, 8))
         
         # Blocking results grid
@@ -4016,7 +4993,7 @@ Now the real game begins! Use your cards to win tricks and score points.
         for row_idx, (label, category) in enumerate(categories):
             # Category label
             tk.Label(board_frame, text=label, font=('Arial', 11, 'bold'),
-                    bg="#34495E", fg="white", width=15).grid(row=row_idx+2, column=0, padx=5, pady=2, sticky="w")
+                    bg="#34495E", fg="white", width=15).grid(row=row_idx+2, column=0, padx=5, pady=5, sticky="w")
             
             # Options with blocking status
             options = self.game.blocking_board[category]
@@ -4028,8 +5005,8 @@ Now the real game begins! Use your cards to win tricks and score points.
                 if category in ["trump", "super_trump"] and isinstance(option, Suit):
                     btn_text = option.value
                     btn_color = self.colors[option]
-                elif category in ["trump", "super_trump"] and option == "Njet":
-                    btn_text = "Njet"
+                elif category in ["trump", "super_trump"] and option == "HET":
+                    btn_text = "HET"
                     btn_color = "#2C3E50"
                 elif category == "start_player":
                     btn_text = self.game.players[option].name
@@ -4059,7 +5036,7 @@ Now the real game begins! Use your cards to win tricks and score points.
                 
                 option_label = tk.Label(board_frame, text=display_text, font=('Arial', 9),
                                        bg=bg_color, fg=text_color, width=10, relief=tk.RAISED, bd=1)
-                option_label.grid(row=row_idx+2, column=col, padx=2, pady=2)
+                option_label.grid(row=row_idx+2, column=col, padx=5, pady=5)
                 
                 col += 1
     
@@ -4068,9 +5045,9 @@ Now the real game begins! Use your cards to win tricks and score points.
         if self.game.num_players < 3:
             return
         
-        # Create main layout with blocking board and team selection side by side
-        main_frame = tk.Frame(self.game_area, bg=self.colors["bg"])
-        main_frame.pack(expand=True, fill=tk.BOTH, padx=10, pady=10)
+        # Create main layout with blocking board and team selection side by side - transparent for table background
+        main_frame = tk.Frame(self.game_area)
+        main_frame.pack(expand=True, fill=tk.BOTH, padx=30, pady=30)
         
         # Configure grid for two-column layout
         main_frame.grid_columnconfigure(0, weight=1)  # Blocking board
@@ -4101,7 +5078,7 @@ Now the real game begins! Use your cards to win tricks and score points.
                 bg=self.colors["bg"], fg=self.colors["accent"]).pack(pady=(0, 10))
         
         tk.Label(frame, text=f"{start_player.name} selects {teammate_text}:",
-                font=self.header_font, bg=self.colors["bg"], fg=self.colors["light_text"]).pack(pady=10)
+                font=self.header_font, bg=self.colors["bg"], fg=self.colors["light_text"]).pack(pady=30)
         
         # Track selected teammates
         if not hasattr(self, 'selected_teammates'):
@@ -4112,7 +5089,7 @@ Now the real game begins! Use your cards to win tricks and score points.
             if teammates_needed > 1:
                 selected_text = f"Selected: {len(self.selected_teammates)}/{teammates_needed}"
                 tk.Label(frame, text=selected_text,
-                        font=self.normal_font, bg=self.colors["bg"], fg="white").pack(pady=10)
+                        font=self.normal_font, bg=self.colors["bg"], fg="white").pack(pady=30)
             
             for i, player in enumerate(self.game.players):
                 if i != start_player_idx and i not in self.selected_teammates:
@@ -4129,7 +5106,7 @@ Now the real game begins! Use your cards to win tricks and score points.
             if self.selected_teammates:
                 selected_names = [self.game.players[idx].name for idx in self.selected_teammates]
                 tk.Label(frame, text=f"Selected: {', '.join(selected_names)}",
-                        font=self.normal_font, bg=self.colors["bg"], fg="lightgreen").pack(pady=10)
+                        font=self.normal_font, bg=self.colors["bg"], fg="lightgreen").pack(pady=30)
         else:
             # AI selects random teammates
             tk.Label(frame, text="AI is selecting...",
@@ -4158,7 +5135,7 @@ Now the real game begins! Use your cards to win tricks and score points.
         if not self.team_structure_chosen:
             # Step 1: Start player chooses whether to be on 2-player or 1-player team
             tk.Label(frame, text=f"{start_player.name}, choose your team:",
-                    font=self.header_font, bg=self.colors["bg"], fg=self.colors["light_text"]).pack(pady=10)
+                    font=self.header_font, bg=self.colors["bg"], fg=self.colors["light_text"]).pack(pady=30)
             
             if start_player.is_human:
                 tk.Button(frame, text="2-Player Team\n(Play with partner)", font=self.normal_font,
@@ -4192,7 +5169,7 @@ Now the real game begins! Use your cards to win tricks and score points.
         if self.start_player_team_choice == "2player":
             # Start player chooses one teammate, other becomes solo player
             tk.Label(frame, text=f"{start_player.name}, choose your teammate:",
-                    font=self.header_font, bg=self.colors["bg"], fg=self.colors["light_text"]).pack(pady=10)
+                    font=self.header_font, bg=self.colors["bg"], fg=self.colors["light_text"]).pack(pady=30)
             
             if start_player.is_human:
                 for player_idx in other_players:
@@ -4209,7 +5186,7 @@ Now the real game begins! Use your cards to win tricks and score points.
             # Start player is solo, other two are teammates
             player1, player2 = other_players
             tk.Label(frame, text=f"{start_player.name} plays alone",
-                    font=self.header_font, bg=self.colors["bg"], fg="#E74C3C").pack(pady=10)
+                    font=self.header_font, bg=self.colors["bg"], fg="#E74C3C").pack(pady=30)
             tk.Label(frame, text=f"{self.game.players[player1].name} & {self.game.players[player2].name} are teammates",
                     font=self.normal_font, bg=self.colors["bg"], fg="#2ECC71").pack(pady=5)
             
@@ -4298,8 +5275,8 @@ Now the real game begins! Use your cards to win tricks and score points.
         
         discard_option = self.game.game_params["discard"]
         
-        tk.Label(frame, text=f"Discard Phase: {discard_option}",
-                font=self.header_font, bg=self.colors["bg"], fg="white").pack(pady=20)
+        tk.Label(frame, text=f"Cache Phase: {discard_option}",
+                font=self.header_font, bg=self.colors["bg"], fg="white").pack(pady=50)
         
         if discard_option == "0 cards":
             # Skip to trick taking
@@ -4329,7 +5306,7 @@ Now the real game begins! Use your cards to win tricks and score points.
                 cards_needed = 2
             
             tk.Label(frame, text=f"{current_player.name}: {instruction}",
-                    font=self.normal_font, bg=self.colors["bg"], fg="white").pack(pady=10)
+                    font=self.normal_font, bg=self.colors["bg"], fg="white").pack(pady=30)
             
             # Show selected cards
             if self.current_discard_player in self.discards_made:
@@ -4350,7 +5327,7 @@ Now the real game begins! Use your cards to win tricks and score points.
                 # Confirm button
                 if len(self.discards_made[self.current_discard_player]) == cards_needed:
                     tk.Button(frame, text="Confirm Discard", font=self.normal_font,
-                             command=self.confirm_discards).pack(pady=10)
+                             command=self.confirm_discards).pack(pady=30)
     
     def ai_discard_cards(self, cards_needed):
         """AI discards cards with smart strategy"""
@@ -4532,6 +5509,9 @@ Now the real game begins! Use your cards to win tricks and score points.
             if len(self.discards_made[current_player_idx]) < self.cards_to_discard:
                 self.discards_made[current_player_idx].append(card)
         
+        # Play discard selection sound for any valid selection/deselection
+        self.sound_manager.play_sound('discard_select')
+        
         self.update_display()
     
     def show_trick_taking(self):
@@ -4541,7 +5521,7 @@ Now the real game begins! Use your cards to win tricks and score points.
         
         # Game parameters
         params_frame = tk.Frame(trick_frame, bg=self.colors["bg"])
-        params_frame.pack(pady=10)
+        params_frame.pack(pady=30)
         
         trump = self.game.game_params.get("trump")
         super_trump = self.game.game_params.get("super_trump")
@@ -4549,12 +5529,12 @@ Now the real game begins! Use your cards to win tricks and score points.
         
         tk.Label(params_frame, text=f"Trump: {trump.value if trump else 'None'}",
                 font=self.normal_font, bg=self.colors["bg"], 
-                fg=self.colors[trump] if trump else "white").pack(side=tk.LEFT, padx=10)
+                fg=self.colors[trump] if trump else "white").pack(side=tk.LEFT, padx=30)
         tk.Label(params_frame, text=f"Super Trump: {super_trump.value if super_trump else 'None'}",
                 font=self.normal_font, bg=self.colors["bg"],
-                fg=self.colors[super_trump] if super_trump else "white").pack(side=tk.LEFT, padx=10)
+                fg=self.colors[super_trump] if super_trump else "white").pack(side=tk.LEFT, padx=30)
         tk.Label(params_frame, text=f"Points per Trick: {points}",
-                font=self.normal_font, bg=self.colors["bg"], fg="white").pack(side=tk.LEFT, padx=10)
+                font=self.normal_font, bg=self.colors["bg"], fg="white").pack(side=tk.LEFT, padx=30)
         
         # Show trick in elegant center display
         self.show_trick_center(trick_frame)
@@ -4580,7 +5560,7 @@ Now the real game begins! Use your cards to win tricks and score points.
         else:
             # Show whose turn it is
             tk.Label(trick_frame, text=f"Waiting for {current_player.name} to play a card...",
-                    font=self.normal_font, bg=self.colors["bg"], fg="white").pack(pady=10)
+                    font=self.normal_font, bg=self.colors["bg"], fg="white").pack(pady=30)
     
     def show_player_cards_DISABLED(self):
         """Display players and their cards in simple layout"""
@@ -4588,7 +5568,7 @@ Now the real game begins! Use your cards to win tricks and score points.
         
         # Restore player area if it was hidden during blocking phase
         if hasattr(self, 'player_area'):
-            self.player_area.pack(fill=tk.X, padx=10, pady=5)
+            self.player_area.pack(fill=tk.X, padx=30, pady=5)
         
         for i, p in enumerate(self.game.players):
             print(f"DEBUG: Player {i}: {p.name}, {len(p.cards)} cards, human={p.is_human}")
@@ -4602,7 +5582,7 @@ Now the real game begins! Use your cards to win tricks and score points.
         
         # Create container for all players with grid layout
         players_container = tk.Frame(self.player_area, bg=self.colors["bg"])
-        players_container.pack(expand=True, fill=tk.BOTH, padx=10, pady=10)
+        players_container.pack(expand=True, fill=tk.BOTH, padx=30, pady=30)
         
         # Configure grid for table-like arrangement
         num_players = len(self.game.players)
@@ -4671,30 +5651,30 @@ Now the real game begins! Use your cards to win tricks and score points.
                 sort_frame.pack(pady=5)
                 
                 tk.Button(sort_frame, text="Sort by Suit", font=('Arial', 8),
-                         command=lambda p=i: self.change_sort(p, True)).pack(side=tk.LEFT, padx=2)
+                         command=lambda p=i: self.change_sort(p, True)).pack(side=tk.LEFT, padx=5)
                 tk.Button(sort_frame, text="Sort by Rank", font=('Arial', 8),
-                         command=lambda p=i: self.change_sort(p, False)).pack(side=tk.LEFT, padx=2)
+                         command=lambda p=i: self.change_sort(p, False)).pack(side=tk.LEFT, padx=5)
                 
                 # Cards display
                 cards_frame = tk.Frame(player_frame, bg=self.colors["bg"])
                 cards_frame.pack(pady=5, fill=tk.BOTH, expand=True)
                 
-                # Show cards in rows
-                cards_per_row = 6
-                for j, card in enumerate(player.cards):
-                    if j % cards_per_row == 0:
-                        row_frame = tk.Frame(cards_frame, bg=self.colors["bg"])
-                        row_frame.pack()
+                # Show cards in fanned layout to save space
+                try:
+                    # Determine clickability for the player
+                    clickable = any(self.is_card_clickable(i, card) for card in player.cards)
                     
-                    try:
-                        is_clickable = self.is_card_clickable(i, card)
-                        card_widget = self.create_card_widget(row_frame, card, clickable=is_clickable, small=True)
-                        card_widget.pack(side=tk.LEFT, padx=1, pady=1)
-                    except Exception as e:
-                        print(f"DEBUG: Error creating card widget: {e}")
-                        # Fallback: show simple text representation
-                        tk.Label(row_frame, text=f"{card.value}{card.suit.value[0]}",
-                                font=('Arial', 8), bg="white", fg="black", width=3).pack(side=tk.LEFT, padx=1)
+                    # Determine orientation based on player position  
+                    orientation = "horizontal"  # Default horizontal fan
+                    
+                    # Create fanned layout
+                    self.create_fanned_card_layout(cards_frame, player.cards, i, 
+                                                 orientation=orientation, clickable=clickable, small=True)
+                except Exception as e:
+                    print(f"DEBUG: Error creating fanned card layout: {e}")
+                    # Fallback: simple text representation
+                    tk.Label(cards_frame, text=f"{len(player.cards)} cards",
+                            font=('Arial', 10), bg=self.colors["bg"], fg="white").pack()
             
             # Show card backs for AI players
             elif not player.is_human and len(player.cards) > 0:
@@ -4708,12 +5688,12 @@ Now the real game begins! Use your cards to win tricks and score points.
                 for j in range(num_backs):
                     try:
                         card_back = self.create_card_back(backs_frame, small=True)
-                        card_back.pack(side=tk.LEFT, padx=1)
+                        card_back.pack(side=tk.LEFT, padx=3)
                     except Exception as e:
                         print(f"DEBUG: Error creating card back: {e}")
                         # Fallback
                         tk.Label(backs_frame, text="?", font=('Arial', 12), 
-                                bg="blue", fg="white", width=2, height=1).pack(side=tk.LEFT, padx=1)
+                                bg="blue", fg="white", width=2, height=1).pack(side=tk.LEFT, padx=3)
             
             # Show team if assigned
             if hasattr(player, 'team') and player.team:
@@ -4769,7 +5749,7 @@ Now the real game begins! Use your cards to win tricks and score points.
         player_frame = tk.Frame(parent, bg=self.colors["bg"], 
                                relief=tk.RAISED if is_current else tk.FLAT, 
                                bd=3 if is_current else 1)
-        player_frame.grid(row=row, column=col, padx=10, pady=10, sticky="nsew")
+        player_frame.grid(row=row, column=col, padx=30, pady=30, sticky="nsew")
         
         # Player info section
         info_frame = tk.Frame(player_frame, bg=self.colors["bg"])
@@ -4808,7 +5788,7 @@ Now the real game begins! Use your cards to win tricks and score points.
     def create_table_center_DISABLED(self, parent):
         """Create the central table area"""
         center_frame = tk.Frame(parent, bg="#8B4513", relief=tk.RAISED, bd=5)  # Wood table color
-        center_frame.grid(row=1, column=1, padx=20, pady=20, sticky="nsew")
+        center_frame.grid(row=1, column=1, padx=50, pady=50, sticky="nsew")
         
         # Table surface with subtle pattern
         table_surface = tk.Frame(center_frame, bg="#A0522D", relief=tk.SUNKEN, bd=2)
@@ -4829,11 +5809,11 @@ Now the real game begins! Use your cards to win tricks and score points.
         # Sort controls for bottom player only
         if orientation == "S":
             sort_frame = tk.Frame(parent, bg=self.colors["bg"])
-            sort_frame.pack(pady=2)
+            sort_frame.pack(pady=5)
             
             tk.Label(sort_frame, text="Sort by:", 
                     font=font.Font(family="Arial", size=10),
-                    bg=self.colors["bg"], fg="white").pack(side=tk.LEFT, padx=2)
+                    bg=self.colors["bg"], fg="white").pack(side=tk.LEFT, padx=5)
             
             sort_suit_btn = tk.Button(sort_frame, text="Suit→Rank", 
                                      font=font.Font(family="Arial", size=9),
@@ -4850,8 +5830,8 @@ Now the real game begins! Use your cards to win tricks and score points.
                 sort_rank_btn.configure(bg="#27AE60", fg="white", relief=tk.SUNKEN)
                 sort_suit_btn.configure(bg="#BDC3C7", fg="black", relief=tk.RAISED)
             
-            sort_suit_btn.pack(side=tk.LEFT, padx=1)
-            sort_rank_btn.pack(side=tk.LEFT, padx=1)
+            sort_suit_btn.pack(side=tk.LEFT, padx=3)
+            sort_rank_btn.pack(side=tk.LEFT, padx=3)
         
         # Cards display
         cards_frame = tk.Frame(parent, bg=self.colors["bg"])
@@ -4864,12 +5844,12 @@ Now the real game begins! Use your cards to win tricks and score points.
             for i, card in enumerate(player.cards[:max_cards_shown]):
                 if i % cards_per_column == 0:
                     col_frame = tk.Frame(cards_frame, bg=self.colors["bg"])
-                    col_frame.pack(side=tk.LEFT, padx=1)
+                    col_frame.pack(side=tk.LEFT, padx=3)
                 
                 is_clickable = self.is_card_clickable(player_idx, card)
                 card_widget = self.create_card_widget(col_frame, card, 
                                                      clickable=is_clickable, small=True)
-                card_widget.pack(pady=1)
+                card_widget.pack(pady=3)
         else:  # Top/bottom players - horizontal arrangement
             max_cards_shown = 12
             cards_per_row = 8
@@ -4882,7 +5862,7 @@ Now the real game begins! Use your cards to win tricks and score points.
                 card_size = False if orientation == "S" else True  # Full size for bottom player
                 card_widget = self.create_card_widget(row_frame, card, 
                                                      clickable=is_clickable, small=card_size)
-                card_widget.pack(side=tk.LEFT, padx=1, pady=1)
+                card_widget.pack(side=tk.LEFT, padx=3, pady=3)
         
         # Show card count if not all cards visible
         if len(player.cards) > max_cards_shown:
@@ -4907,7 +5887,7 @@ Now the real game begins! Use your cards to win tricks and score points.
             # Stack vertically
             for i in range(cards_to_show):
                 card_back = self.create_card_back(cards_frame, small=True)
-                card_back.pack(pady=1)
+                card_back.pack(pady=3)
         else:  # Top/bottom players
             cards_to_show = min(8, num_cards)
             row_frame = tk.Frame(cards_frame, bg=self.colors["bg"])
@@ -4915,13 +5895,13 @@ Now the real game begins! Use your cards to win tricks and score points.
             # Arrange horizontally
             for i in range(cards_to_show):
                 card_back = self.create_card_back(row_frame, small=True)
-                card_back.pack(side=tk.LEFT, padx=1)
+                card_back.pack(side=tk.LEFT, padx=3)
         
         # Card count
         count_color = "#E74C3C" if num_cards <= 3 else "#F39C12" if num_cards <= 6 else "white"
         tk.Label(cards_frame, text=f"{num_cards} cards",
                 font=font.Font(family="Arial", size=10, weight="bold"),
-                bg=self.colors["bg"], fg=count_color).pack(pady=2)
+                bg=self.colors["bg"], fg=count_color).pack(pady=5)
     
     def arrange_players_around_table(self, parent):
         """Arrange all players around the table with human players showing cards, others showing card backs"""
@@ -4949,16 +5929,16 @@ Now the real game begins! Use your cards to win tricks and score points.
         # Create player frame based on position
         if position == "bottom":
             player_frame = tk.Frame(parent, bg=self.colors["bg"])
-            player_frame.pack(side=tk.BOTTOM, pady=10)
+            player_frame.pack(side=tk.BOTTOM, pady=30)
         elif position == "top":
             player_frame = tk.Frame(parent, bg=self.colors["bg"])
-            player_frame.pack(side=tk.TOP, pady=10)
+            player_frame.pack(side=tk.TOP, pady=30)
         elif position == "left":
             player_frame = tk.Frame(parent, bg=self.colors["bg"])
-            player_frame.pack(side=tk.LEFT, padx=10, fill=tk.Y)
+            player_frame.pack(side=tk.LEFT, padx=30, fill=tk.Y)
         elif position == "right":
             player_frame = tk.Frame(parent, bg=self.colors["bg"])
-            player_frame.pack(side=tk.RIGHT, padx=10, fill=tk.Y)
+            player_frame.pack(side=tk.RIGHT, padx=30, fill=tk.Y)
         elif position == "top_left":
             player_frame = tk.Frame(parent, bg=self.colors["bg"])
             player_frame.place(relx=0.2, rely=0.1, anchor=tk.CENTER)
@@ -5012,12 +5992,12 @@ Now the real game begins! Use your cards to win tricks and score points.
             sort_suit_btn = tk.Button(sort_frame, text="Suit→Rank",
                                      font=self.normal_font,
                                      command=lambda: self.change_sort(player_idx, True))
-            sort_suit_btn.pack(side=tk.LEFT, padx=2)
+            sort_suit_btn.pack(side=tk.LEFT, padx=5)
             
             sort_rank_btn = tk.Button(sort_frame, text="Rank→Suit",
                                      font=self.normal_font,
                                      command=lambda: self.change_sort(player_idx, False))
-            sort_rank_btn.pack(side=tk.LEFT, padx=2)
+            sort_rank_btn.pack(side=tk.LEFT, padx=5)
             
             # Highlight current sort method
             if player.sort_by_suit_first:
@@ -5031,76 +6011,159 @@ Now the real game begins! Use your cards to win tricks and score points.
         cards_display_frame = tk.Frame(parent, bg=self.colors["bg"])
         cards_display_frame.pack()
         
-        # Arrange cards based on position
-        if position in ["left", "right"]:
-            # Vertical arrangement for side players
-            for i, card in enumerate(player.cards[:8]):  # Limit visible cards
-                if i % 4 == 0:
-                    row_frame = tk.Frame(cards_display_frame, bg=self.colors["bg"])
-                    row_frame.pack()
-                
-                is_clickable = self.is_card_clickable(player_idx, card)
-                card_widget = self.create_card_widget(row_frame, card, clickable=is_clickable, small=True)
-                card_widget.pack(side=tk.TOP, pady=1)
-        else:
-            # Horizontal arrangement for top/bottom players
-            cards_per_row = 8
-            for i, card in enumerate(player.cards):
-                if i % cards_per_row == 0:
-                    row_frame = tk.Frame(cards_display_frame, bg=self.colors["bg"])
-                    row_frame.pack()
-                
-                is_clickable = self.is_card_clickable(player_idx, card)
-                card_widget = self.create_card_widget(row_frame, card, clickable=is_clickable)
-                card_widget.pack(side=tk.LEFT, padx=2, pady=2)
+        # Use fanned card arrangement for all positions
+        try:
+            # Determine clickability
+            clickable = any(self.is_card_clickable(player_idx, card) for card in player.cards)
+            
+            # Determine orientation based on position
+            if position in ["left", "right"]:
+                orientation = "vertical"
+            else:
+                orientation = "horizontal"
+            
+            # Create fanned layout
+            self.create_fanned_card_layout(cards_display_frame, player.cards, player_idx,
+                                         orientation=orientation, clickable=clickable, small=True)
+        except Exception as e:
+            print(f"DEBUG: Error creating fanned layout for {player.name}: {e}")
+            # Fallback: simple card count
+            tk.Label(cards_display_frame, text=f"{len(player.cards)} cards",
+                    font=self.normal_font, bg=self.colors["bg"], fg="white").pack()
     
     def show_card_backs(self, parent, num_cards, position):
-        """Show card backs for AI players"""
+        """Show card backs for AI players in fanned layout"""
         cards_frame = tk.Frame(parent, bg=self.colors["bg"])
         cards_frame.pack()
         
-        # Show limited number of card backs
-        display_cards = min(num_cards, 8) if position in ["left", "right"] else min(num_cards, 12)
+        if num_cards > 0:
+            try:
+                # Create fanned card back layout
+                self.create_fanned_card_back_layout(cards_frame, num_cards, position)
+            except Exception as e:
+                print(f"DEBUG: Error creating fanned card backs: {e}")
+                # Fallback: simple card count
+                tk.Label(cards_frame, text=f"({num_cards} cards)",
+                        font=self.normal_font, bg=self.colors["bg"], fg="white").pack()
+    
+    def create_fanned_card_back_layout(self, parent, num_cards, position):
+        """Create fanned layout of card backs"""
+        # Create canvas for card back positioning
+        canvas_frame = tk.Frame(parent, bg=self.colors["bg"])
+        canvas_frame.pack(expand=True, fill=tk.BOTH)
+        
+        # Use smaller card backs for fanned layout
+        card_w, card_h = 60, 90
+        overlap_spacing = 15
+        
+        # Limit displayed cards to prevent too much clutter
+        display_cards = min(num_cards, 6)
         
         if position in ["left", "right"]:
-            # Vertical arrangement
+            # Vertical fan for side players
+            canvas_width = card_w + 20
+            total_height = card_h + (display_cards - 1) * overlap_spacing
+            
+            canvas = tk.Canvas(canvas_frame, width=canvas_width, height=min(total_height, 400),
+                             bg=self.colors["bg"], highlightthickness=0)
+            canvas.pack()
+            
+            # Position card backs with vertical overlap
             for i in range(display_cards):
-                if i % 4 == 0:
-                    row_frame = tk.Frame(cards_frame, bg=self.colors["bg"])
-                    row_frame.pack()
-                card_back = self.create_card_back(row_frame, small=True)
-                card_back.pack(side=tk.TOP, pady=1)
+                x_pos = 5
+                y_pos = i * overlap_spacing
+                
+                if self.sprite_manager:
+                    try:
+                        back_image = self.sprite_manager.get_card_back_image(card_w, card_h)
+                        canvas.create_image(x_pos + card_w//2, y_pos + card_h//2, image=back_image)
+                        
+                        # Store reference
+                        if not hasattr(canvas, 'back_images'):
+                            canvas.back_images = []
+                        canvas.back_images.append(back_image)
+                        
+                    except Exception as e:
+                        print(f"Error creating card back: {e}")
+                        canvas.create_rectangle(x_pos, y_pos, x_pos + card_w, y_pos + card_h,
+                                              fill="#1A237E", outline="white")
+                        
         else:
-            # Horizontal arrangement
-            cards_per_row = 6
+            # Horizontal fan for top/bottom players
+            total_width = card_w + (display_cards - 1) * overlap_spacing
+            canvas_height = card_h + 20
+            
+            canvas = tk.Canvas(canvas_frame, width=min(total_width, 500), height=canvas_height,
+                             bg=self.colors["bg"], highlightthickness=0)
+            canvas.pack()
+            
+            # Position card backs with horizontal overlap
             for i in range(display_cards):
-                if i % cards_per_row == 0:
-                    row_frame = tk.Frame(cards_frame, bg=self.colors["bg"])
-                    row_frame.pack()
-                card_back = self.create_card_back(row_frame)
-                card_back.pack(side=tk.LEFT, padx=1)
+                x_pos = i * overlap_spacing
+                y_pos = 5
+                
+                if self.sprite_manager:
+                    try:
+                        back_image = self.sprite_manager.get_card_back_image(card_w, card_h)
+                        canvas.create_image(x_pos + card_w//2, y_pos + card_h//2, image=back_image)
+                        
+                        # Store reference
+                        if not hasattr(canvas, 'back_images'):
+                            canvas.back_images = []
+                        canvas.back_images.append(back_image)
+                        
+                    except Exception as e:
+                        print(f"Error creating card back: {e}")
+                        canvas.create_rectangle(x_pos, y_pos, x_pos + card_w, y_pos + card_h,
+                                              fill="#1A237E", outline="white")
         
-        # Show card count
-        if num_cards > 0:
-            tk.Label(cards_frame, text=f"({num_cards} cards)",
-                    font=self.normal_font, bg=self.colors["bg"], fg="white").pack(pady=2)
+        # Show total card count
+        tk.Label(parent, text=f"({num_cards} cards)",
+                font=self.normal_font, bg=self.colors["bg"], fg="white").pack(pady=5)
     
     def create_card_back(self, parent, small=False):
         """Create an attractive card back widget with artwork"""
-        size = (40, 60) if small else (60, 80)
+        # Use native sprite resolution for best quality by default
+        if self.sprite_manager:
+            # Native resolution gives perfect quality
+            size = (150, 225) if small else (300, 450)  # Native res for normal cards
+        else:
+            # Fallback sizes for text-based cards
+            size = (100, 150) if small else (150, 225)
         
-        # Main card frame with gradient-like effect
+        # Use sprite sheet if available, otherwise fall back to text-based rendering
+        if self.sprite_manager:
+            # Create image-based card back widget
+            card_frame = tk.Frame(parent, relief=tk.RAISED, bd=2,
+                                 width=size[0], height=size[1])
+            card_frame.pack_propagate(False)
+            
+            try:
+                back_image = self.sprite_manager.get_card_back_image(size[0], size[1])
+                image_label = tk.Label(card_frame, image=back_image, bd=0)
+                image_label.pack()
+                
+                # Store reference to prevent garbage collection
+                image_label.image = back_image
+                
+                return card_frame
+                
+            except Exception as e:
+                print(f"Error loading card back image: {e}")
+                # Fall back to text rendering
+        
+        # Text-based card back (original design)
         card_frame = tk.Frame(parent, bg="#1A237E", relief=tk.RAISED, bd=2,
                              width=size[0], height=size[1])
         card_frame.pack_propagate(False)
         
         # Inner decorative frame
         inner_frame = tk.Frame(card_frame, bg="#283593", relief=tk.SUNKEN, bd=1)
-        inner_frame.pack(expand=True, fill=tk.BOTH, padx=2, pady=2)
+        inner_frame.pack(expand=True, fill=tk.BOTH, padx=5, pady=5)
         
         # Central design area
         design_frame = tk.Frame(inner_frame, bg="#3949AB")
-        design_frame.pack(expand=True, fill=tk.BOTH, padx=2, pady=2)
+        design_frame.pack(expand=True, fill=tk.BOTH, padx=5, pady=5)
         
         # Top decoration
         top_font_size = 12 if small else 16
@@ -5147,9 +6210,6 @@ Now the real game begins! Use your cards to win tricks and score points.
     
     def create_card_widget(self, parent, card, clickable=False, small=False, player_idx=None):
         """Create a card widget"""
-        card_frame = tk.Frame(parent, bg=self.colors["card_bg"], 
-                              relief=tk.RAISED, bd=2)
-        
         # Check if card is selected for discard using object identity
         is_selected = False
         if (hasattr(self, 'selecting_discards') and self.selecting_discards and 
@@ -5160,8 +6220,291 @@ Now the real game begins! Use your cards to win tricks and score points.
                 if selected_card is card:
                     is_selected = True
                     break
-            if is_selected:
-                card_frame.configure(bg="#E74C3C")  # Red background for selected
+        
+        # Determine card size
+        # Use native sprite resolution for best quality by default
+        if self.sprite_manager:
+            # Native resolution gives perfect quality
+            size = (150, 225) if small else (300, 450)  # Native res for normal cards
+        else:
+            # Fallback sizes for text-based cards
+            size = (100, 150) if small else (150, 225)
+        
+        # Use sprite sheet if available, otherwise fall back to text-based rendering
+        if self.sprite_manager:
+            # Create image-based card widget
+            card_frame = tk.Frame(parent, relief=tk.RAISED, bd=2)
+            
+            # Get card image from sprite sheet
+            try:
+                card_image = self.sprite_manager.get_card_image(card, size[0], size[1])
+                image_label = tk.Label(card_frame, image=card_image, bd=0)
+                image_label.pack()
+                
+                # Selection overlay for discarding
+                if is_selected:
+                    # Add red border to indicate selection
+                    card_frame.configure(bg="#E74C3C", bd=4)
+                
+                # Store reference to prevent garbage collection
+                image_label.image = card_image
+                
+            except Exception as e:
+                print(f"Error loading card image: {e}")
+                # Fall back to text rendering
+                return self._create_text_card_widget(parent, card, clickable, small, player_idx, is_selected)
+        else:
+            # Fall back to original text-based rendering
+            return self._create_text_card_widget(parent, card, clickable, small, player_idx, is_selected)
+        
+        # Set frame size
+        card_frame.configure(width=size[0], height=size[1])
+        card_frame.pack_propagate(False)
+        
+        # Add click handlers for sprite-based cards
+        if clickable:
+            if self.game.current_phase == Phase.TRICK_TAKING:
+                # Playing cards during tricks
+                card_frame.bind("<Button-1>", lambda e, c=card: self.play_card(c))
+                card_frame.bind("<Enter>", lambda e: card_frame.configure(relief=tk.SUNKEN))
+                card_frame.bind("<Leave>", lambda e: card_frame.configure(relief=tk.RAISED))
+                
+                # Make image clickable too
+                if self.sprite_manager:
+                    image_label.bind("<Button-1>", lambda e, c=card: self.play_card(c))
+            
+            elif (hasattr(self, 'selecting_discards') and self.selecting_discards and 
+                  self.game.current_phase == Phase.DISCARD):
+                # Selecting cards for discard
+                card_frame.bind("<Button-1>", lambda e, c=card: self.handle_discard_click(c))
+                card_frame.bind("<Enter>", lambda e: card_frame.configure(relief=tk.SUNKEN))
+                card_frame.bind("<Leave>", lambda e: card_frame.configure(relief=tk.RAISED))
+                
+                # Make image clickable too
+                if self.sprite_manager:
+                    image_label.bind("<Button-1>", lambda e, c=card: self.handle_discard_click(c))
+            
+            elif (hasattr(self, 'selecting_cache') and self.selecting_cache and 
+                  self.game.current_phase == Phase.CACHE):
+                # Selecting cards for cache
+                card_frame.bind("<Button-1>", lambda e: self.handle_cache_click(card))
+                card_frame.bind("<Enter>", lambda e: card_frame.configure(relief=tk.SUNKEN))
+                card_frame.bind("<Leave>", lambda e: card_frame.configure(relief=tk.RAISED))
+                
+                # Make image clickable too
+                if self.sprite_manager:
+                    image_label.bind("<Button-1>", lambda e: self.handle_cache_click(card))
+        
+        return card_frame
+    
+    def create_fanned_card_layout(self, parent, cards, player_idx, orientation="horizontal", clickable=False, small=False):
+        """Create a fanned layout of cards to save space and look more realistic"""
+        if not cards:
+            return
+            
+        # Create a canvas for positioning cards with overlap
+        canvas_frame = tk.Frame(parent, bg=self.colors["bg"])
+        canvas_frame.pack(expand=True, fill=tk.BOTH)
+        
+        # Calculate dimensions based on card size and number of cards
+        if small:
+            card_w, card_h = 100, 150
+            overlap_spacing = 20  # Small overlap
+        else:
+            # Use much smaller cards for fanned layout to fit better
+            card_w, card_h = 80, 120
+            overlap_spacing = 25
+            
+        num_cards = len(cards)
+        
+        if orientation == "horizontal":
+            # Horizontal fan (for top/bottom players)
+            total_width = card_w + (num_cards - 1) * overlap_spacing
+            canvas_height = card_h + 20
+            
+            canvas = tk.Canvas(canvas_frame, width=min(total_width, 800), height=canvas_height, 
+                             bg=self.colors["bg"], highlightthickness=0)
+            canvas.pack()
+            
+            # Position cards with overlap
+            for i, card in enumerate(cards):
+                x_pos = i * overlap_spacing
+                y_pos = 5
+                
+                # Create card widget
+                if self.sprite_manager:
+                    try:
+                        card_image = self.sprite_manager.get_card_image(card, card_w, card_h)
+                        
+                        # Create card as canvas item for better positioning
+                        card_id = canvas.create_image(x_pos + card_w//2, y_pos + card_h//2, 
+                                                    image=card_image)
+                        
+                        # Store reference to prevent garbage collection
+                        if not hasattr(canvas, 'card_images'):
+                            canvas.card_images = []
+                        canvas.card_images.append(card_image)
+                        
+                        # Add click handling if needed
+                        if clickable:
+                            canvas.tag_bind(card_id, "<Button-1>", 
+                                          lambda e, c=card: self.handle_fanned_card_click(c))
+                            
+                    except Exception as e:
+                        print(f"Error creating fanned card: {e}")
+                        # Fallback to text
+                        canvas.create_text(x_pos + card_w//2, y_pos + card_h//2, 
+                                         text=f"{card.value}\n{card.suit.value[:1]}", 
+                                         fill="white", font=("Arial", 8))
+                        
+        else:  # vertical orientation (for side players)
+            # Vertical fan
+            canvas_width = card_w + 20
+            total_height = card_h + (num_cards - 1) * overlap_spacing
+            
+            canvas = tk.Canvas(canvas_frame, width=canvas_width, height=min(total_height, 600),
+                             bg=self.colors["bg"], highlightthickness=0)
+            canvas.pack()
+            
+            # Position cards with vertical overlap
+            for i, card in enumerate(cards):
+                x_pos = 5
+                y_pos = i * overlap_spacing
+                
+                if self.sprite_manager:
+                    try:
+                        card_image = self.sprite_manager.get_card_image(card, card_w, card_h)
+                        
+                        card_id = canvas.create_image(x_pos + card_w//2, y_pos + card_h//2,
+                                                    image=card_image)
+                        
+                        if not hasattr(canvas, 'card_images'):
+                            canvas.card_images = []
+                        canvas.card_images.append(card_image)
+                        
+                        if clickable:
+                            canvas.tag_bind(card_id, "<Button-1>",
+                                          lambda e, c=card: self.handle_fanned_card_click(c))
+                            
+                    except Exception as e:
+                        print(f"Error creating fanned card: {e}")
+                        canvas.create_text(x_pos + card_w//2, y_pos + card_h//2,
+                                         text=f"{card.value}\n{card.suit.value[:1]}", 
+                                         fill="white", font=("Arial", 8))
+        
+        return canvas_frame
+    
+    def create_fanned_card_backs(self, parent, num_backs, orientation="horizontal", small=False):
+        """Create a fanned layout of card backs to save space"""
+        if num_backs <= 0:
+            return
+            
+        # Create a canvas for positioning card backs with overlap
+        canvas_frame = tk.Frame(parent, bg=self.colors["bg"])
+        canvas_frame.pack(expand=True, fill=tk.BOTH)
+        
+        # Calculate dimensions based on card size
+        if small:
+            card_w, card_h = 60, 90
+            overlap_spacing = 15  # Smaller overlap for backs
+        else:
+            card_w, card_h = 80, 120
+            overlap_spacing = 20
+            
+        if orientation == "horizontal":
+            # Horizontal fan (for top/bottom players)
+            total_width = card_w + (num_backs - 1) * overlap_spacing
+            canvas_height = card_h + 20
+            
+            canvas = tk.Canvas(canvas_frame, width=min(total_width, 600), height=canvas_height,
+                             bg=self.colors["bg"], highlightthickness=0)
+            canvas.pack()
+            
+            # Position card backs with overlap
+            for i in range(num_backs):
+                x_pos = i * overlap_spacing
+                y_pos = 5
+                
+                if self.sprite_manager:
+                    try:
+                        back_image = self.sprite_manager.get_card_back_image(card_w, card_h)
+                        
+                        canvas.create_image(x_pos + card_w//2, y_pos + card_h//2,
+                                          image=back_image)
+                        
+                        # Store reference to prevent garbage collection
+                        if not hasattr(canvas, 'back_images'):
+                            canvas.back_images = []
+                        canvas.back_images.append(back_image)
+                        
+                    except Exception as e:
+                        print(f"Error creating fanned card back: {e}")
+                        # Fallback rectangle
+                        canvas.create_rectangle(x_pos, y_pos, x_pos + card_w, y_pos + card_h,
+                                              fill="#8B4513", outline="#654321", width=2)
+                        canvas.create_text(x_pos + card_w//2, y_pos + card_h//2,
+                                         text="NJET", fill="white", font=("Arial", 6))
+                else:
+                    # Text-based fallback
+                    canvas.create_rectangle(x_pos, y_pos, x_pos + card_w, y_pos + card_h,
+                                          fill="#8B4513", outline="#654321", width=2)
+                    canvas.create_text(x_pos + card_w//2, y_pos + card_h//2,
+                                     text="NJET", fill="white", font=("Arial", 6))
+                    
+        else:  # vertical orientation (for side players)
+            # Vertical fan
+            canvas_width = card_w + 20
+            total_height = card_h + (num_backs - 1) * overlap_spacing
+            
+            canvas = tk.Canvas(canvas_frame, width=canvas_width, height=min(total_height, 400),
+                             bg=self.colors["bg"], highlightthickness=0)
+            canvas.pack()
+            
+            # Position card backs with vertical overlap
+            for i in range(num_backs):
+                x_pos = 5
+                y_pos = i * overlap_spacing
+                
+                if self.sprite_manager:
+                    try:
+                        back_image = self.sprite_manager.get_card_back_image(card_w, card_h)
+                        
+                        canvas.create_image(x_pos + card_w//2, y_pos + card_h//2,
+                                          image=back_image)
+                        
+                        if not hasattr(canvas, 'back_images'):
+                            canvas.back_images = []
+                        canvas.back_images.append(back_image)
+                        
+                    except Exception as e:
+                        print(f"Error creating fanned card back: {e}")
+                        canvas.create_rectangle(x_pos, y_pos, x_pos + card_w, y_pos + card_h,
+                                              fill="#8B4513", outline="#654321", width=2)
+                        canvas.create_text(x_pos + card_w//2, y_pos + card_h//2,
+                                         text="NJET", fill="white", font=("Arial", 6))
+                else:
+                    canvas.create_rectangle(x_pos, y_pos, x_pos + card_w, y_pos + card_h,
+                                          fill="#8B4513", outline="#654321", width=2)
+                    canvas.create_text(x_pos + card_w//2, y_pos + card_h//2,
+                                     text="NJET", fill="white", font=("Arial", 6))
+        
+        return canvas_frame
+    
+    def handle_fanned_card_click(self, card):
+        """Handle clicks on fanned cards"""
+        if self.game.current_phase == Phase.TRICK_TAKING:
+            self.play_card(card)
+        elif (hasattr(self, 'selecting_discards') and self.selecting_discards and 
+              self.game.current_phase == Phase.DISCARD):
+            self.handle_discard_click(card)
+    
+    def _create_text_card_widget(self, parent, card, clickable=False, small=False, player_idx=None, is_selected=False):
+        """Create a text-based card widget (fallback when sprite sheet is not available)"""
+        card_frame = tk.Frame(parent, bg=self.colors["card_bg"], 
+                              relief=tk.RAISED, bd=2)
+        
+        if is_selected:
+            card_frame.configure(bg="#E74C3C")  # Red background for selected
         
         # Card value
         bg_color = "#E74C3C" if is_selected else self.colors["card_bg"]
@@ -5183,13 +6526,19 @@ Now the real game begins! Use your cards to win tricks and score points.
         symbol_label.pack(pady=(0, 10))
         
         # Make card size consistent
-        size = (40, 60) if small else (60, 80)
+        # Use native sprite resolution for best quality by default
+        if self.sprite_manager:
+            # Native resolution gives perfect quality
+            size = (150, 225) if small else (300, 450)  # Native res for normal cards
+        else:
+            # Fallback sizes for text-based cards
+            size = (100, 150) if small else (150, 225)
         card_frame.configure(width=size[0], height=size[1])
         card_frame.pack_propagate(False)
         
         if clickable:
             if self.game.current_phase == Phase.TRICK_TAKING:
-                # Playing cards during tricks - fix closure issue by capturing card
+                # Playing cards during tricks
                 card_frame.bind("<Button-1>", lambda e, c=card: self.play_card(c))
                 card_frame.bind("<Enter>", lambda e: card_frame.configure(relief=tk.SUNKEN))
                 card_frame.bind("<Leave>", lambda e: card_frame.configure(relief=tk.RAISED))
@@ -5200,7 +6549,7 @@ Now the real game begins! Use your cards to win tricks and score points.
             
             elif (hasattr(self, 'selecting_discards') and self.selecting_discards and 
                   self.game.current_phase == Phase.DISCARD):
-                # Selecting cards for discard - fix closure issue by capturing card
+                # Selecting cards for discard
                 card_frame.bind("<Button-1>", lambda e, c=card: self.handle_discard_click(c))
                 card_frame.bind("<Enter>", lambda e: card_frame.configure(relief=tk.SUNKEN))
                 card_frame.bind("<Leave>", lambda e: card_frame.configure(relief=tk.RAISED))
@@ -5224,31 +6573,39 @@ Now the real game begins! Use your cards to win tricks and score points.
     
     def show_trick_center(self, parent):
         """Show the current trick in an elegant center display"""
-        # Create elegant trick display area
-        trick_display = tk.Frame(parent, bg="#34495E", relief=tk.RAISED, bd=3)
-        trick_display.pack(pady=15)
+        # Create elegant trick display area with table background
+        trick_container = tk.Frame(parent, relief=tk.RAISED, bd=3)
+        trick_container.pack(pady=35)
+        
+        # Create canvas with table background
+        trick_bg_canvas = self.create_table_canvas(trick_container, width=500, height=350)
+        trick_bg_canvas.pack()
+        
+        # Create frame on top of canvas for UI elements
+        trick_display = tk.Frame(trick_bg_canvas, bg=self.colors["panel_bg"], relief=tk.FLAT)
+        trick_display.place(relx=0.5, rely=0.5, anchor=tk.CENTER, relwidth=0.9, relheight=0.9)
         
         # Title area
-        title_frame = tk.Frame(trick_display, bg="#34495E")
-        title_frame.pack(fill=tk.X, padx=10, pady=5)
+        title_frame = tk.Frame(trick_display, bg=self.colors["panel_bg"])
+        title_frame.pack(fill=tk.X, padx=30, pady=5)
         
         tk.Label(title_frame, text="Current Trick",
                 font=font.Font(family="Arial", size=16, weight="bold"),
-                bg="#34495E", fg="#ECF0F1").pack()
+                bg=self.colors["panel_bg"], fg="#ECF0F1").pack()
         
         if not self.game.current_trick:
             tk.Label(trick_display, text="Waiting for first card...",
                     font=font.Font(family="Arial", size=12, style="italic"),
-                    bg="#34495E", fg="#BDC3C7").pack(pady=15)
+                    bg=self.colors["panel_bg"], fg="#BDC3C7").pack(pady=35)
             return
         
         # Cards area with beautiful layout
-        cards_area = tk.Frame(trick_display, bg="#2C3E50", relief=tk.SUNKEN, bd=2)
-        cards_area.pack(padx=10, pady=5, fill=tk.BOTH, expand=True)
+        cards_area = tk.Frame(trick_display, bg=self.colors["bg"], relief=tk.SUNKEN, bd=2)
+        cards_area.pack(padx=30, pady=5, fill=tk.BOTH, expand=True)
         
         # Arrange cards in a circle-like pattern
-        cards_container = tk.Frame(cards_area, bg="#2C3E50")
-        cards_container.pack(padx=15, pady=15)
+        cards_container = tk.Frame(cards_area, bg=self.colors["bg"])
+        cards_container.pack(padx=35, pady=35)
         
         # Show each played card with elegant styling
         for i, (player_idx, card) in enumerate(self.game.current_trick):
@@ -5256,7 +6613,7 @@ Now the real game begins! Use your cards to win tricks and score points.
             
             # Card container with sophisticated styling
             card_container = tk.Frame(cards_container, bg="#2C3E50")
-            card_container.pack(side=tk.LEFT, padx=12)
+            card_container.pack(side=tk.LEFT, padx=32)
             
             # Player name with enhanced styling
             is_leader = i == 0
@@ -5279,7 +6636,7 @@ Now the real game begins! Use your cards to win tricks and score points.
             card_frame.pack(pady=3)
             
             card_widget = self.create_card_widget(card_frame, card, small=False)
-            card_widget.pack(padx=2, pady=2)
+            card_widget.pack(padx=5, pady=5)
             
             # Play order with elegant numbering
             order_text = ["1st", "2nd", "3rd", "4th", "5th"][i]
@@ -5596,9 +6953,32 @@ Now the real game begins! Use your cards to win tricks and score points.
     def create_animated_card_widget(self, card):
         """Create a temporary card widget for animation"""
         # Create on the main game area so it can move freely
-        animated_card = tk.Frame(self.game_area, bg=self.colors["card_bg"], 
-                                relief=tk.RAISED, bd=2, width=60, height=80)
+        # Use native resolution for animated cards for best quality
+        if self.sprite_manager:
+            width, height = 300, 450  # Native resolution
+        else:
+            width, height = 150, 225  # Fallback
+        animated_card = tk.Frame(self.game_area, relief=tk.RAISED, bd=2, width=width, height=height)
         animated_card.pack_propagate(False)
+        
+        # Use sprite sheet if available, otherwise fall back to text-based rendering
+        if self.sprite_manager:
+            try:
+                card_image = self.sprite_manager.get_card_image(card, width, height)
+                image_label = tk.Label(animated_card, image=card_image, bd=0)
+                image_label.pack()
+                
+                # Store reference to prevent garbage collection
+                image_label.image = card_image
+                
+                return animated_card
+                
+            except Exception as e:
+                print(f"Error loading animated card image: {e}")
+                # Fall back to text rendering
+        
+        # Text-based animated card (original design)
+        animated_card.configure(bg=self.colors["card_bg"])
         
         # Add card content
         value_label = tk.Label(animated_card, text=str(card.value),
@@ -5844,7 +7224,7 @@ Now the real game begins! Use your cards to win tricks and score points.
         overlay.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
         
         tk.Label(overlay, text=f"{winner.name} wins the trick!",
-                font=self.header_font, bg=self.colors["bg"], fg="white").pack(pady=20)
+                font=self.header_font, bg=self.colors["bg"], fg="white").pack(pady=50)
     
     def end_round(self):
         """End the current round"""
@@ -5889,13 +7269,13 @@ Now the real game begins! Use your cards to win tricks and score points.
         frame.pack(expand=True)
         
         tk.Label(frame, text=f"Round {self.game.round_number} Complete!",
-                font=self.header_font, bg=self.colors["bg"], fg="white").pack(pady=20)
+                font=self.header_font, bg=self.colors["bg"], fg="white").pack(pady=50)
         tk.Label(frame, text=f"({self.game.round_number}/{self.game.max_rounds} rounds played)",
                 font=self.normal_font, bg=self.colors["bg"], fg="white").pack()
         
         # Show tricks won and captured 0s
         tk.Label(frame, text="Round Results:",
-                font=self.normal_font, bg=self.colors["bg"], fg="white").pack(pady=10)
+                font=self.normal_font, bg=self.colors["bg"], fg="white").pack(pady=30)
         
         for player in self.game.players:
             tricks_text = f"{player.name}: {player.tricks_won} tricks"
@@ -5913,7 +7293,7 @@ Now the real game begins! Use your cards to win tricks and score points.
         
         # Round team scores
         tk.Label(frame, text="\nRound Team Scores:",
-                font=self.normal_font, bg=self.colors["bg"], fg="white").pack(pady=10)
+                font=self.normal_font, bg=self.colors["bg"], fg="white").pack(pady=30)
         tk.Label(frame, text=f"Team 1: {self.game.team_scores[1]} points",
                 font=self.normal_font, bg=self.colors["bg"], 
                 fg=self.colors["team1"]).pack()
@@ -5923,7 +7303,7 @@ Now the real game begins! Use your cards to win tricks and score points.
         
         # Individual total scores
         tk.Label(frame, text="\nIndividual Total Scores:",
-                font=self.normal_font, bg=self.colors["bg"], fg="white").pack(pady=10)
+                font=self.normal_font, bg=self.colors["bg"], fg="white").pack(pady=30)
         
         # Sort players by score for display
         sorted_players = sorted(self.game.players, key=lambda p: p.total_score, reverse=True)
@@ -5943,21 +7323,21 @@ Now the real game begins! Use your cards to win tricks and score points.
             
             if len(winners) == 1:
                 tk.Label(frame, text=f"\n{winners[0].name} WINS THE GAME!",
-                        font=self.title_font, bg=self.colors["bg"], fg="gold").pack(pady=20)
+                        font=self.title_font, bg=self.colors["bg"], fg="gold").pack(pady=50)
                 tk.Label(frame, text=f"Final Score: {highest_score} points",
                         font=self.normal_font, bg=self.colors["bg"], fg="gold").pack()
             else:
                 winner_names = ", ".join(w.name for w in winners)
                 tk.Label(frame, text=f"\nTIE GAME!",
-                        font=self.title_font, bg=self.colors["bg"], fg="gold").pack(pady=20)
+                        font=self.title_font, bg=self.colors["bg"], fg="gold").pack(pady=50)
                 tk.Label(frame, text=f"Winners: {winner_names} ({highest_score} points each)",
                         font=self.normal_font, bg=self.colors["bg"], fg="gold").pack()
             
             tk.Button(frame, text="New Game", font=self.normal_font,
-                     command=self.show_player_selection).pack(pady=10)
+                     command=self.show_player_selection).pack(pady=30)
         else:
             tk.Button(frame, text="Next Round", font=self.normal_font,
-                     command=self.next_round).pack(pady=20)
+                     command=self.next_round).pack(pady=50)
     
     def next_round(self):
         """Start the next round"""
@@ -6010,6 +7390,296 @@ Now the real game begins! Use your cards to win tricks and score points.
         """Update sound volume"""
         volume = float(value) / 100.0
         self.sound_manager.set_volume(sfx_vol=volume)
+    
+    def play_button_sound(self):
+        """Play button press sound effect"""
+        self.sound_manager.play_sound('button_press')
+    
+    def with_button_sound(self, callback):
+        """Wrapper that plays button sound before executing callback"""
+        def wrapper(*args, **kwargs):
+            self.play_button_sound()
+            return callback(*args, **kwargs) if callback else None
+        return wrapper
+    
+    def deal_cards_with_animation(self):
+        """Deal cards with shuffle/deal sound and fast visual animation"""
+        # Play the shuffle/deal sound
+        self.sound_manager.play_sound('shuffle_deal')
+        
+        # Show dealing animation overlay
+        self.show_dealing_animation()
+        
+        # Actually deal the cards (without animation delay for game logic)
+        self.game.deal_cards()
+    
+    def show_dealing_animation(self):
+        """Show fast card dealing animation matching ShuffleDeal.mp3 length"""
+        # Create animation overlay
+        overlay = tk.Toplevel(self.root)
+        overlay.geometry("800x600")
+        overlay.configure(bg="#2C3E50")
+        overlay.transient(self.root)
+        overlay.grab_set()
+        overlay.attributes("-topmost", True)
+        
+        # Center the overlay
+        overlay.geometry("+{}+{}".format(
+            self.root.winfo_rootx() + 200,
+            self.root.winfo_rooty() + 100
+        ))
+        
+        # Animation canvas
+        canvas = tk.Canvas(overlay, width=800, height=600, bg="#2C3E50", highlightthickness=0)
+        canvas.pack()
+        
+        # Title
+        canvas.create_text(400, 100, text="DEALING CARDS", 
+                          fill="white", font=("Arial", 24, "bold"))
+        
+        # Animation state
+        animation_step = 0
+        total_steps = 60  # Fast animation (~2-3 seconds at 30fps)
+        cards_per_player = {2: 15, 3: 16, 4: 15, 5: 12}[self.game.num_players]
+        total_cards = cards_per_player * self.game.num_players
+        
+        def animate_dealing():
+            nonlocal animation_step
+            
+            canvas.delete("cards")  # Clear previous cards
+            
+            # Draw deck in center
+            deck_x, deck_y = 400, 300
+            deck_size = max(1, int(total_cards * (1 - animation_step / total_steps)))
+            
+            # Draw remaining deck
+            for i in range(min(deck_size, 10)):  # Show max 10 card thickness
+                canvas.create_rectangle(deck_x - 40 + i, deck_y - 60 + i, 
+                                      deck_x + 40 + i, deck_y + 60 + i,
+                                      fill="#8B4513", outline="#654321", width=2, tags="cards")
+            
+            # Draw dealt cards flying to players
+            dealt_ratio = animation_step / total_steps
+            cards_dealt = int(total_cards * dealt_ratio)
+            
+            # Player positions (simplified circle layout)
+            player_positions = []
+            if self.game.num_players == 2:
+                player_positions = [(400, 500), (400, 150)]  # Bottom, Top
+            elif self.game.num_players == 3:
+                player_positions = [(400, 500), (200, 200), (600, 200)]  # Bottom, Top-left, Top-right
+            elif self.game.num_players == 4:
+                player_positions = [(400, 500), (150, 300), (400, 150), (650, 300)]  # Bottom, Left, Top, Right
+            elif self.game.num_players == 5:
+                player_positions = [(400, 500), (200, 400), (250, 150), (550, 150), (600, 400)]
+            
+            # Show cards at player positions
+            for p_idx, (px, py) in enumerate(player_positions):
+                player_cards = min(cards_per_player, max(0, cards_dealt - p_idx * cards_per_player))
+                
+                for c_idx in range(min(player_cards, 8)):  # Show max 8 cards per player
+                    offset_x = (c_idx - 4) * 8  # Fan out cards
+                    canvas.create_rectangle(px + offset_x - 15, py - 20, 
+                                          px + offset_x + 15, py + 20,
+                                          fill="#654321", outline="#8B4513", width=1, tags="cards")
+                
+                # Player label
+                player_name = self.game.players[p_idx].name if p_idx < len(self.game.players) else f"Player {p_idx+1}"
+                canvas.create_text(px, py + 40, text=player_name, 
+                                 fill="white", font=("Arial", 10), tags="cards")
+            
+            # Progress indicator
+            progress = animation_step / total_steps
+            canvas.create_rectangle(200, 550, 600, 570, fill="#34495E", outline="white", tags="cards")
+            canvas.create_rectangle(200, 550, 200 + 400 * progress, 570, fill="#27AE60", tags="cards")
+            canvas.create_text(400, 560, text=f"Dealing... {int(progress * 100)}%", 
+                             fill="white", font=("Arial", 10), tags="cards")
+            
+            animation_step += 1
+            
+            if animation_step <= total_steps:
+                # Continue animation
+                overlay.after(50, animate_dealing)  # ~20fps for smooth animation
+            else:
+                # Animation complete - close overlay
+                overlay.after(500, overlay.destroy)  # Brief pause then close
+        
+        # Start animation
+        animate_dealing()
+    
+    def load_table_background(self):
+        """Load the table background image"""
+        if not PIL_AVAILABLE:
+            print("PIL not available - cannot load table background")
+            return
+            
+        try:
+            table_path = "Table.png"
+            if os.path.exists(table_path):
+                # Load the table image at original resolution
+                self.table_source = Image.open(table_path)
+                print(f"✓ Table background loaded successfully - Original size: {self.table_source.size}")
+            else:
+                print(f"✗ Table.png not found at {table_path}")
+                self.table_source = None
+        except Exception as e:
+            print(f"✗ Error loading table background: {e}")
+            self.table_source = None
+    
+    def load_het_board(self):
+        """Load the HET board image"""
+        if not PIL_AVAILABLE:
+            print("PIL not available - cannot load HET board")
+            return
+            
+        try:
+            board_path = "HETBoard.png"
+            if os.path.exists(board_path):
+                self.het_board_source = Image.open(board_path)
+                print(f"✓ HET board loaded successfully - Original size: {self.het_board_source.size}")
+            else:
+                print(f"✗ HETBoard.png not found at {board_path}")
+                self.het_board_source = None
+        except Exception as e:
+            print(f"✗ Error loading HET board: {e}")
+            self.het_board_source = None
+    
+    def setup_table_background(self, container):
+        """Set up table background directly on a container widget"""
+        try:
+            print(f"DEBUG: setup_table_background called for {container}")
+            print(f"DEBUG: PIL_AVAILABLE = {PIL_AVAILABLE}")
+            print(f"DEBUG: has table_source = {hasattr(self, 'table_source')}")
+            if hasattr(self, 'table_source'):
+                print(f"DEBUG: table_source is not None = {self.table_source is not None}")
+            
+            if not PIL_AVAILABLE or not hasattr(self, 'table_source') or not self.table_source:
+                # Fallback to solid color
+                print("DEBUG: Using fallback color - table not available")
+                container.configure(bg="#FF0000")  # Bright red to make it obvious
+                return
+            
+            print("DEBUG: Proceeding with table background setup")
+            
+            
+            def update_container_background():
+                """Update container background with table image"""
+                try:
+                    # Get container size
+                    container.update_idletasks()
+                    width = container.winfo_width()
+                    height = container.winfo_height()
+                    
+                    print(f"DEBUG: Container size: {width}x{height}")
+                    
+                    if width > 1 and height > 1:
+                        print("DEBUG: Creating table image...")
+                        # Resize table image
+                        table_img = self.table_source.resize((width, height), Image.Resampling.LANCZOS)
+                        
+                        # Check if tkinter is ready for PhotoImage creation
+                        if not self.root or not self.root.winfo_exists():
+                            print("DEBUG: Root window not ready")
+                            return
+                        
+                        print("DEBUG: Creating PhotoImage...")
+                        table_photo = ImageTk.PhotoImage(table_img)
+                        
+                        # Set as container background (this approach uses a Label with the image)
+                        if hasattr(container, 'table_bg_label'):
+                            print("DEBUG: Destroying old table label")
+                            container.table_bg_label.destroy()
+                        
+                        print("DEBUG: Creating and placing table label...")
+                        container.table_bg_label = tk.Label(container, image=table_photo)
+                        container.table_bg_label.image = table_photo  # Keep reference
+                        container.table_bg_label.place(x=0, y=0, width=width, height=height)
+                        container.table_bg_label.lower()  # Send to back
+                        
+                        print(f"DEBUG: ✓ Table background label created and placed: {width}x{height}")
+                    else:
+                        print(f"DEBUG: Container size too small: {width}x{height}")
+                        
+                except Exception as e:
+                    print(f"Error updating table background: {e}")
+                    container.configure(bg=self.colors["panel_bg"])
+            
+            # Set initial background - give more time for window to be ready
+            container.after(200, update_container_background)
+            
+            # Update on resize - only bind if not already bound
+            def on_resize(event):
+                try:
+                    if event.widget == container:
+                        container.after(10, update_container_background)
+                except Exception as e:
+                    print(f"Error in resize handler: {e}")
+            
+            if not hasattr(container, '_table_resize_bound'):
+                container.bind("<Configure>", on_resize)
+                container._table_resize_bound = True
+            
+        except Exception as e:
+            print(f"Error in setup_table_background: {e}")
+            # Fallback
+            container.configure(bg=self.colors["panel_bg"])
+    
+    def create_table_canvas(self, parent, width=None, height=None):
+        """Create a responsive canvas with table background that fills the entire space"""
+        # If no size specified, make it fill the parent dynamically
+        if width is None or height is None:
+            canvas = tk.Canvas(parent, highlightthickness=0, bg=self.colors["panel_bg"])
+        else:
+            canvas = tk.Canvas(parent, width=width, height=height, highlightthickness=0, bg=self.colors["panel_bg"])
+        
+        # Store resize state to prevent multiple rapid updates
+        canvas.resize_pending = False
+        
+        def update_table_background(event=None):
+            """Update table background when canvas size changes"""
+            if hasattr(self, 'table_source') and self.table_source:
+                try:
+                    # Get current canvas size
+                    canvas_width = canvas.winfo_width()
+                    canvas_height = canvas.winfo_height()
+                    
+                    if canvas_width > 1 and canvas_height > 1:  # Valid size
+                        # Don't clear immediately - keep old image until new one is ready
+                        # Resize table image to current canvas size
+                        table_img = self.table_source.resize((canvas_width, canvas_height), Image.Resampling.LANCZOS)
+                        table_image = ImageTk.PhotoImage(table_img)
+                        
+                        # Now clear and add new image atomically
+                        canvas.delete("table_bg")
+                        canvas.create_image(canvas_width//2, canvas_height//2, image=table_image, tags="table_bg")
+                        
+                        # Store reference to prevent garbage collection
+                        canvas.table_image_ref = table_image
+                        
+                        # Move table background to bottom layer
+                        canvas.tag_lower("table_bg")
+                        
+                except Exception as e:
+                    print(f"Error updating table background: {e}")
+                    # Keep fallback background color already set
+            
+            # Reset resize state
+            canvas.resize_pending = False
+        
+        def on_canvas_resize(event):
+            """Handle canvas resize with debouncing"""
+            if not canvas.resize_pending:
+                canvas.resize_pending = True
+                # Small delay to debounce rapid resize events
+                canvas.after(10, update_table_background)
+        
+        # Bind resize event with debouncing
+        canvas.bind("<Configure>", on_canvas_resize)
+        
+        # Initial background setup
+        canvas.after(1, update_table_background)
+        
+        return canvas
     
     def exit_to_menu(self):
         """Exit to main menu"""
@@ -6107,12 +7777,35 @@ Now the real game begins! Use your cards to win tricks and score points.
                 self.root.quit()
 
 class MainMenu:
-    """Main menu for Njet game with navigation and settings"""
+    """Main menu for HET game with navigation and settings"""
     
     def __init__(self, root):
         self.root = root
-        self.root.title("Njet! - Card Game")
-        self.root.geometry("800x672")
+        self.root.title("HET! - Card Game - Press F11 for Fullscreen")
+        
+        # Set up responsive sizing for main menu too
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        
+        if screen_width >= 1920:
+            menu_width, menu_height = 1200, 900
+        elif screen_width >= 1600:
+            menu_width, menu_height = 1000, 800
+        else:
+            menu_width, menu_height = 900, 700
+            
+        self.root.geometry(f"{menu_width}x{menu_height}")
+        
+        # Center window
+        x = (screen_width - menu_width) // 2
+        y = (screen_height - menu_height) // 2
+        self.root.geometry(f"{menu_width}x{menu_height}+{x}+{y}")
+        
+        # Enable fullscreen for main menu too
+        self.root.bind('<F11>', self.toggle_fullscreen)
+        self.root.bind('<Escape>', self.exit_fullscreen)
+        self.is_fullscreen = False
+        self.root.resizable(True, True)
         
         # Use the same vintage color scheme as the game
         self.colors = {
@@ -6167,6 +7860,23 @@ class MainMenu:
         # Schedule next check
         self.root.after(100, self._check_music_events)
     
+    def toggle_fullscreen(self, event=None):
+        """Toggle fullscreen mode for main menu"""
+        self.is_fullscreen = not self.is_fullscreen
+        self.root.attributes('-fullscreen', self.is_fullscreen)
+        
+        if self.is_fullscreen:
+            print("Main menu entered fullscreen mode")
+        else:
+            print("Main menu exited fullscreen mode")
+    
+    def exit_fullscreen(self, event=None):
+        """Exit fullscreen mode for main menu"""
+        if self.is_fullscreen:
+            self.is_fullscreen = False
+            self.root.attributes('-fullscreen', False)
+            print("Main menu exited fullscreen mode")
+    
     def _load_settings(self):
         """Load settings from file"""
         try:
@@ -6191,6 +7901,17 @@ class MainMenu:
         except Exception as e:
             print(f"Could not save settings: {e}")
     
+    def play_button_sound(self):
+        """Play button press sound effect"""
+        self.sound_manager.play_sound('button_press')
+    
+    def with_button_sound(self, callback):
+        """Wrapper that plays button sound before executing callback"""
+        def wrapper(*args, **kwargs):
+            self.play_button_sound()
+            return callback(*args, **kwargs) if callback else None
+        return wrapper
+    
     def clear_window(self):
         """Clear all widgets from the window"""
         for widget in self.root.winfo_children():
@@ -6206,12 +7927,12 @@ class MainMenu:
         
         # Title
         title_label = tk.Label(main_frame, text="NJET!", 
-                              font=('Arial', 48, 'bold'), 
+                              font=('Lora', 48, 'bold'), 
                               bg=self.colors["bg"], fg=self.colors["accent"])
         title_label.pack(pady=(80, 20))
         
-        subtitle_label = tk.Label(main_frame, text="Strategic Card Game by Stefan Dorra", 
-                                 font=('Arial', 14), 
+        subtitle_label = tk.Label(main_frame, text="A Trick Taking Card Game by Stefan Dorra", 
+                                 font=('Lora', 14), 
                                  bg=self.colors["bg"], fg=self.colors["light_text"])
         subtitle_label.pack(pady=(0, 40))
         
@@ -6221,45 +7942,50 @@ class MainMenu:
         
         buttons = [
             ("New Game", self.show_new_game_menu),
+            ("📚 Tutorial", self.start_tutorial),
             ("Load Game", self.show_load_game_menu),
             ("Settings", self.show_settings_menu),
             ("Exit", self.exit_game)
         ]
         
         for text, command in buttons:
-            btn = tk.Button(button_frame, text=text, font=('Arial', 16, 'bold'),
-                           command=command, width=15, height=2,
+            btn = tk.Button(button_frame, text=text, font=('Lora', 16, 'bold'),
+                           command=self.with_button_sound(command), width=15, height=2,
                            bg=self.colors["button_bg"], fg=self.colors["bg"], 
                            activebackground=self.colors["button_hover"], 
                            activeforeground=self.colors["bg"],
                            relief=tk.RAISED, bd=3,
                            cursor="hand2")
-            btn.pack(pady=10)
+            btn.pack(pady=30)
         
         # Status bar with music info
         status_frame = tk.Frame(main_frame, bg=self.colors["bg"])
-        status_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=10)
+        status_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=30)
         
         music_status = "🎵 Music ON" if self.settings['music_enabled'] else "🔇 Music OFF"
         tk.Label(status_frame, text=music_status, 
-                font=('Arial', 10), bg=self.colors["bg"], fg=self.colors["accent"]).pack()
+                font=('Lora', 10), bg=self.colors["bg"], fg=self.colors["accent"]).pack()
     
     def show_new_game_menu(self):
         """Show new game setup menu"""
         self.clear_window()
         
-        # Header
+        # Header with back button
         header_frame = tk.Frame(self.root, bg=self.colors["bg"])
-        header_frame.pack(fill=tk.X, pady=20)
+        header_frame.pack(fill=tk.X, pady=(50, 10))
         
-        tk.Button(header_frame, text="← Back", font=('Arial', 12, 'bold'),
-                 command=self.show_main_menu, 
-                 bg=self.colors["panel_bg"], fg="white",
+        tk.Button(header_frame, text="← Back", font=('Lora', 12, 'bold'),
+                 command=self.with_button_sound(self.show_main_menu), 
+                 bg=self.colors["panel_bg"], fg=self.colors["bg"],
                  activebackground=self.colors["button_hover"],
                  activeforeground=self.colors["bg"],
-                 relief=tk.RAISED, bd=2, cursor="hand2").pack(side=tk.LEFT, padx=20)
+                 relief=tk.RAISED, bd=2, cursor="hand2").pack(side=tk.LEFT, padx=50)
         
-        tk.Label(header_frame, text="New Game Setup", font=('Arial', 24, 'bold'),
+        # Centered title
+        title_frame = tk.Frame(self.root, bg=self.colors["bg"])
+        title_frame.pack(fill=tk.X, pady=(0, 40))
+        
+        tk.Label(title_frame, text="New Game Setup", font=('Lora', 24, 'bold'),
                 bg=self.colors["bg"], fg=self.colors["accent"]).pack()
         
         # Main content
@@ -6268,67 +7994,67 @@ class MainMenu:
         
         # Game mode selection
         tk.Label(content_frame, text="Choose Game Mode:", 
-                font=('Arial', 18, 'bold'), bg=self.colors["bg"], fg=self.colors["light_text"]).pack(pady=20)
+                font=('Lora', 18, 'bold'), bg=self.colors["bg"], fg=self.colors["light_text"]).pack(pady=50)
         
         # Local multiplayer section
         local_frame = tk.Frame(content_frame, bg=self.colors["panel_bg"], relief=tk.RAISED, bd=3)
-        local_frame.pack(pady=10, padx=40, fill=tk.X)
+        local_frame.pack(pady=30, padx=40, fill=tk.X)
         
         tk.Label(local_frame, text="🏠 Local Multiplayer", 
-                font=('Arial', 16, 'bold'), bg=self.colors["panel_bg"], fg="white").pack(pady=10)
+                font=('Lora', 16, 'bold'), bg=self.colors["panel_bg"], fg="white").pack(pady=30)
         tk.Label(local_frame, text="Play with friends on the same device", 
-                font=('Arial', 12), bg=self.colors["panel_bg"], fg="white").pack(pady=5)
+                font=('Lora', 12), bg=self.colors["panel_bg"], fg="white").pack(pady=5)
         
         local_buttons_frame = tk.Frame(local_frame, bg=self.colors["panel_bg"])
-        local_buttons_frame.pack(pady=10)
+        local_buttons_frame.pack(pady=30)
         
         for i in range(2, 6):
-            btn = tk.Button(local_buttons_frame, text=f"{i} Players", font=('Arial', 12, 'bold'),
-                           command=lambda num=i: self.start_new_game(num),
+            btn = tk.Button(local_buttons_frame, text=f"{i} Players", font=('Lora', 12, 'bold'),
+                           command=lambda num=i: self.with_button_sound(lambda: self.start_new_game(num))(),
                            width=10, height=2, 
                            bg=self.colors["button_bg"], fg=self.colors["bg"],
                            activebackground=self.colors["button_hover"],
                            activeforeground=self.colors["bg"],
                            relief=tk.RAISED, bd=3, cursor="hand2")
-            btn.pack(side=tk.LEFT, padx=10)
+            btn.pack(side=tk.LEFT, padx=30)
         
         # Online multiplayer section
         online_frame = tk.Frame(content_frame, bg=self.colors["success"], relief=tk.RAISED, bd=3)
-        online_frame.pack(pady=20, padx=40, fill=tk.X)
+        online_frame.pack(pady=50, padx=40, fill=tk.X)
         
         tk.Label(online_frame, text="🌐 Online Multiplayer", 
-                font=('Arial', 16, 'bold'), bg=self.colors["success"], fg="white").pack(pady=10)
+                font=('Lora', 16, 'bold'), bg=self.colors["success"], fg="white").pack(pady=30)
         tk.Label(online_frame, text="Play with friends over the internet or local network", 
-                font=('Arial', 12), bg=self.colors["success"], fg="white").pack(pady=5)
+                font=('Lora', 12), bg=self.colors["success"], fg="white").pack(pady=5)
         
         online_buttons_frame = tk.Frame(online_frame, bg=self.colors["success"])
-        online_buttons_frame.pack(pady=10)
+        online_buttons_frame.pack(pady=30)
         
         # Host game button
-        host_btn = tk.Button(online_buttons_frame, text="🏁 Host Game", font=('Arial', 12, 'bold'),
+        host_btn = tk.Button(online_buttons_frame, text="🏁 Host Game", font=('Lora', 12, 'bold'),
                            command=self.show_host_game_menu,
                            width=15, height=2,
                            bg=self.colors["button_bg"], fg=self.colors["bg"],
                            activebackground=self.colors["button_hover"],
                            activeforeground=self.colors["bg"],
                            relief=tk.RAISED, bd=3, cursor="hand2")
-        host_btn.pack(side=tk.LEFT, padx=20)
+        host_btn.pack(side=tk.LEFT, padx=50)
         
         # Join game button
-        join_btn = tk.Button(online_buttons_frame, text="🔗 Join Game", font=('Arial', 12, 'bold'),
+        join_btn = tk.Button(online_buttons_frame, text="🔗 Join Game", font=('Lora', 12, 'bold'),
                            command=self.show_join_game_menu,
                            width=15, height=2,
                            bg=self.colors["button_bg"], fg=self.colors["bg"],
                            activebackground=self.colors["button_hover"],
                            activeforeground=self.colors["bg"],
                            relief=tk.RAISED, bd=3, cursor="hand2")
-        join_btn.pack(side=tk.LEFT, padx=20)
+        join_btn.pack(side=tk.LEFT, padx=50)
     
     def start_new_game(self, num_players):
         """Start a new game with specified number of players"""
         try:
             # Create new game
-            self.current_game = NjetGUI(self.root, num_players, main_menu=self)
+            self.current_game = HETGUI(self.root, num_players, main_menu=self)
             print(f"Started new {num_players}-player game")
         except Exception as e:
             print(f"Error starting new game: {e}")
@@ -6341,10 +8067,10 @@ class MainMenu:
         
         # Header
         header_frame = tk.Frame(self.root, bg="#2C3E50")
-        header_frame.pack(fill=tk.X, pady=20)
+        header_frame.pack(fill=tk.X, pady=50)
         
         tk.Button(header_frame, text="← Back", font=('Arial', 12),
-                 command=self.show_main_menu, bg="#34495E", fg="white").pack(side=tk.LEFT, padx=20)
+                 command=self.show_main_menu, bg="#34495E", fg="white").pack(side=tk.LEFT, padx=50)
         
         tk.Label(header_frame, text="Load Game", font=('Arial', 24, 'bold'),
                 bg="#2C3E50", fg="#F1C40F").pack()
@@ -6358,7 +8084,7 @@ class MainMenu:
         
         if saved_games:
             tk.Label(content_frame, text="Select a saved game:", 
-                    font=('Arial', 16), bg="#2C3E50", fg="white").pack(pady=20)
+                    font=('Arial', 16), bg="#2C3E50", fg="white").pack(pady=50)
             
             for save_file in saved_games:
                 btn = tk.Button(content_frame, text=save_file, font=('Arial', 12),
@@ -6367,7 +8093,7 @@ class MainMenu:
                 btn.pack(pady=5)
         else:
             tk.Label(content_frame, text="No saved games found", 
-                    font=('Arial', 16), bg="#2C3E50", fg="lightgray").pack(pady=100)
+                    font=('Arial', 16), bg="#2C3E50", fg="lightgray").pack(pady=300)
     
     def _get_saved_games(self):
         """Get list of saved game files"""
@@ -6400,14 +8126,14 @@ class MainMenu:
         
         # Header
         header_frame = tk.Frame(self.root, bg=self.colors["bg"])
-        header_frame.pack(fill=tk.X, pady=20)
+        header_frame.pack(fill=tk.X, pady=50)
         
         tk.Button(header_frame, text="← Back", font=('Arial', 12, 'bold'),
                  command=self.show_main_menu, 
                  bg=self.colors["panel_bg"], fg="white",
                  activebackground=self.colors["button_hover"],
                  activeforeground=self.colors["bg"],
-                 relief=tk.RAISED, bd=2, cursor="hand2").pack(side=tk.LEFT, padx=20)
+                 relief=tk.RAISED, bd=2, cursor="hand2").pack(side=tk.LEFT, padx=50)
         
         tk.Label(header_frame, text="Settings", font=('Arial', 24, 'bold'),
                 bg=self.colors["bg"], fg=self.colors["accent"]).pack()
@@ -6421,11 +8147,11 @@ class MainMenu:
                                    font=('Arial', 14, 'bold'), 
                                    bg=self.colors["panel_bg"], fg=self.colors["light_text"],
                                    labelanchor='n')
-        music_frame.pack(fill=tk.X, pady=20)
+        music_frame.pack(fill=tk.X, pady=50)
         
         # Music on/off
         music_toggle_frame = tk.Frame(music_frame, bg=self.colors["panel_bg"])
-        music_toggle_frame.pack(fill=tk.X, padx=10, pady=10)
+        music_toggle_frame.pack(fill=tk.X, padx=30, pady=30)
         
         tk.Label(music_toggle_frame, text="Background Music:", 
                 font=('Arial', 12), bg=self.colors["panel_bg"], fg=self.colors["light_text"]).pack(side=tk.LEFT)
@@ -6440,7 +8166,7 @@ class MainMenu:
         
         # Music volume
         volume_frame = tk.Frame(music_frame, bg=self.colors["panel_bg"])
-        volume_frame.pack(fill=tk.X, padx=10, pady=10)
+        volume_frame.pack(fill=tk.X, padx=30, pady=30)
         
         tk.Label(volume_frame, text="Music Volume:", 
                 font=('Arial', 12), bg=self.colors["panel_bg"], fg=self.colors["light_text"]).pack(side=tk.LEFT)
@@ -6457,11 +8183,11 @@ class MainMenu:
                                  font=('Arial', 14, 'bold'), 
                                  bg=self.colors["panel_bg"], fg=self.colors["light_text"],
                                  labelanchor='n')
-        sfx_frame.pack(fill=tk.X, pady=20)
+        sfx_frame.pack(fill=tk.X, pady=50)
         
         # SFX volume
         sfx_volume_frame = tk.Frame(sfx_frame, bg=self.colors["panel_bg"])
-        sfx_volume_frame.pack(fill=tk.X, padx=10, pady=10)
+        sfx_volume_frame.pack(fill=tk.X, padx=30, pady=30)
         
         tk.Label(sfx_volume_frame, text="Effects Volume:", 
                 font=('Arial', 12), bg=self.colors["panel_bg"], fg=self.colors["light_text"]).pack(side=tk.LEFT)
@@ -6517,12 +8243,12 @@ class MainMenu:
         
         # Header
         header_frame = tk.Frame(self.root, bg=self.colors["bg"])
-        header_frame.pack(fill=tk.X, pady=20)
+        header_frame.pack(fill=tk.X, pady=50)
         
         tk.Button(header_frame, text="← Back", font=('Arial', 12, 'bold'),
                  command=self.show_new_game_menu, 
                  bg=self.colors["panel_bg"], fg="white",
-                 relief=tk.RAISED, bd=2, cursor="hand2").pack(side=tk.LEFT, padx=20)
+                 relief=tk.RAISED, bd=2, cursor="hand2").pack(side=tk.LEFT, padx=50)
         
         tk.Label(header_frame, text="🏁 Host Online Game", font=('Arial', 24, 'bold'),
                 bg=self.colors["bg"], fg=self.colors["accent"]).pack()
@@ -6533,21 +8259,21 @@ class MainMenu:
         
         # Room setup frame
         info_frame = tk.Frame(content_frame, bg=self.colors["success"], relief=tk.RAISED, bd=3)
-        info_frame.pack(pady=20, padx=40)
+        info_frame.pack(pady=50, padx=40)
         
         tk.Label(info_frame, text="Secure Room Setup", 
-                font=('Arial', 16, 'bold'), bg=self.colors["success"], fg="white").pack(pady=10)
+                font=('Arial', 16, 'bold'), bg=self.colors["success"], fg="white").pack(pady=30)
         
         # Player name entry
         name_frame = tk.Frame(info_frame, bg=self.colors["success"])
-        name_frame.pack(pady=10)
+        name_frame.pack(pady=30)
         
         tk.Label(name_frame, text="Your Name:", font=('Arial', 12), 
-                bg=self.colors["success"], fg="white").pack(side=tk.LEFT, padx=10)
+                bg=self.colors["success"], fg="white").pack(side=tk.LEFT, padx=30)
         
         self.host_name_entry = tk.Entry(name_frame, font=('Arial', 12), width=15)
         self.host_name_entry.insert(0, "Player 1")
-        self.host_name_entry.pack(side=tk.LEFT, padx=10)
+        self.host_name_entry.pack(side=tk.LEFT, padx=30)
         
         # Room code display (will be populated after creation)
         self.room_code_label = tk.Label(info_frame, text="Room Code: (Will be generated)", 
@@ -6574,7 +8300,7 @@ class MainMenu:
 4. Game will start automatically when both players connect"""
         
         tk.Label(content_frame, text=instructions, font=('Arial', 11),
-                bg=self.colors["bg"], fg="white", justify=tk.LEFT).pack(pady=20)
+                bg=self.colors["bg"], fg="white", justify=tk.LEFT).pack(pady=50)
     
     def start_host_game(self):
         """Start hosting an online game using relay server"""
@@ -6627,12 +8353,12 @@ class MainMenu:
         
         # Header
         header_frame = tk.Frame(self.root, bg=self.colors["bg"])
-        header_frame.pack(fill=tk.X, pady=20)
+        header_frame.pack(fill=tk.X, pady=50)
         
         tk.Button(header_frame, text="← Back", font=('Arial', 12, 'bold'),
                  command=self.show_new_game_menu, 
                  bg=self.colors["panel_bg"], fg="white",
-                 relief=tk.RAISED, bd=2, cursor="hand2").pack(side=tk.LEFT, padx=20)
+                 relief=tk.RAISED, bd=2, cursor="hand2").pack(side=tk.LEFT, padx=50)
         
         tk.Label(header_frame, text="🔗 Join Online Game", font=('Arial', 24, 'bold'),
                 bg=self.colors["bg"], fg=self.colors["accent"]).pack()
@@ -6643,32 +8369,32 @@ class MainMenu:
         
         # Room join frame
         info_frame = tk.Frame(content_frame, bg=self.colors["panel_bg"], relief=tk.RAISED, bd=3)
-        info_frame.pack(pady=20, padx=40)
+        info_frame.pack(pady=50, padx=40)
         
         tk.Label(info_frame, text="Join Secure Room", 
-                font=('Arial', 16, 'bold'), bg=self.colors["panel_bg"], fg="white").pack(pady=10)
+                font=('Arial', 16, 'bold'), bg=self.colors["panel_bg"], fg="white").pack(pady=30)
         
         # Player name entry
         name_frame = tk.Frame(info_frame, bg=self.colors["panel_bg"])
-        name_frame.pack(pady=10)
+        name_frame.pack(pady=30)
         
         tk.Label(name_frame, text="Your Name:", font=('Arial', 12), 
-                bg=self.colors["panel_bg"], fg="white").pack(side=tk.LEFT, padx=10)
+                bg=self.colors["panel_bg"], fg="white").pack(side=tk.LEFT, padx=30)
         
         self.join_name_entry = tk.Entry(name_frame, font=('Arial', 12), width=15)
         self.join_name_entry.insert(0, "Player 2")
-        self.join_name_entry.pack(side=tk.LEFT, padx=10)
+        self.join_name_entry.pack(side=tk.LEFT, padx=30)
         
         # Room code entry
         code_frame = tk.Frame(info_frame, bg=self.colors["panel_bg"])
-        code_frame.pack(pady=10)
+        code_frame.pack(pady=30)
         
         tk.Label(code_frame, text="Room Code:", font=('Arial', 12), 
-                bg=self.colors["panel_bg"], fg="white").pack(side=tk.LEFT, padx=10)
+                bg=self.colors["panel_bg"], fg="white").pack(side=tk.LEFT, padx=30)
         
         self.room_code_entry = tk.Entry(code_frame, font=('Arial', 12), width=10)
         self.room_code_entry.insert(0, "ABC123")  # Example code
-        self.room_code_entry.pack(side=tk.LEFT, padx=10)
+        self.room_code_entry.pack(side=tk.LEFT, padx=30)
         
         # Connect button
         connect_btn = tk.Button(content_frame, text="🔗 Join Room", font=('Arial', 16, 'bold'),
@@ -6687,7 +8413,7 @@ class MainMenu:
 4. Click 'Join Room' to connect securely"""
         
         tk.Label(content_frame, text=instructions, font=('Arial', 11),
-                bg=self.colors["bg"], fg="white", justify=tk.LEFT).pack(pady=20)
+                bg=self.colors["bg"], fg="white", justify=tk.LEFT).pack(pady=50)
     
     def connect_to_game(self):
         """Connect to an online game using relay server"""
@@ -6749,12 +8475,12 @@ class MainMenu:
         
         # Header
         header_frame = tk.Frame(self.root, bg=self.colors["bg"])
-        header_frame.pack(fill=tk.X, pady=20)
+        header_frame.pack(fill=tk.X, pady=50)
         
         tk.Button(header_frame, text="← Cancel", font=('Arial', 12, 'bold'),
                  command=lambda: self.cancel_network_game(network_manager), 
                  bg=self.colors["warning"], fg="white",
-                 relief=tk.RAISED, bd=2, cursor="hand2").pack(side=tk.LEFT, padx=20)
+                 relief=tk.RAISED, bd=2, cursor="hand2").pack(side=tk.LEFT, padx=50)
         
         title = "🏁 Hosting Game..." if is_host else "🔗 Connecting..."
         tk.Label(header_frame, text=title, font=('Arial', 24, 'bold'),
@@ -6767,7 +8493,7 @@ class MainMenu:
         # Waiting animation
         self.waiting_label = tk.Label(content_frame, text="⏳ Waiting for players to connect...", 
                                      font=('Arial', 18), bg=self.colors["bg"], fg="white")
-        self.waiting_label.pack(pady=100)
+        self.waiting_label.pack(pady=300)
         
         # Check for connection
         def check_connection():
@@ -6799,7 +8525,7 @@ class MainMenu:
         """Start the actual online game"""
         try:
             # Create online game (2 players for now)
-            self.current_game = NjetGUI(self.root, 2, main_menu=self, network_manager=network_manager)
+            self.current_game = HETGUI(self.root, 2, main_menu=self, network_manager=network_manager)
             
             # Send initial connection message
             import time
@@ -6817,6 +8543,12 @@ class MainMenu:
             network_manager.disconnect()
             self.show_main_menu()
 
+    def start_tutorial(self):
+        """Start the interactive tutorial"""
+        # Create a tutorial game instance with 4 players
+        self.current_game = HETGUI(self.root, 4, main_menu=self)
+        self.current_game.show_tutorial()
+    
     def exit_game(self):
         """Exit the application"""
         if messagebox.askokcancel("Exit", "Are you sure you want to exit?"):

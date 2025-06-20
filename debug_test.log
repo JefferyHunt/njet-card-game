@@ -1,0 +1,5 @@
+/Users/jefferyhunt/Code/Njet/njet-game-2.py:506: RuntimeWarning: use sndarray: No module named 'numpy'
+(ModuleNotFoundError: No module named 'numpy')
+  sound = pygame.sndarray.make_sound(wave_array)
+2025-06-19 22:39:59.716 Python[42177:1936624] +[IMKClient subclass]: chose IMKClient_Modern
+2025-06-19 22:39:59.716 Python[42177:1936624] +[IMKInputSession subclass]: chose IMKInputSession_Modern

@@ -1,0 +1,82 @@
+/Users/jefferyhunt/Code/Njet/njet-game-2.py:506: RuntimeWarning: use sndarray: No module named 'numpy'
+(ModuleNotFoundError: No module named 'numpy')
+  sound = pygame.sndarray.make_sound(wave_array)
+2025-06-19 22:04:01.526 Python[38743:1884462] +[IMKClient subclass]: chose IMKClient_Modern
+2025-06-19 22:04:01.526 Python[38743:1884462] +[IMKInputSession subclass]: chose IMKInputSession_Modern
+Exception in Tkinter callback
+Traceback (most recent call last):
+  File "/usr/local/Cellar/python@3.13/3.13.4/Frameworks/Python.framework/Versions/3.13/lib/python3.13/tkinter/__init__.py", line 2068, in __call__
+    return self.func(*args)
+           ~~~~~~~~~^^^^^^^
+  File "/Users/jefferyhunt/Code/Njet/njet-game-2.py", line 2189, in start_game_with_players
+    self.update_display()
+    ~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/jefferyhunt/Code/Njet/njet-game-2.py", line 3299, in update_display
+    self.update_info_panel()
+    ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/jefferyhunt/Code/Njet/njet-game-2.py", line 3339, in update_info_panel
+    self.create_canvas_info_panel()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/jefferyhunt/Code/Njet/njet-game-2.py", line 3015, in create_canvas_info_panel
+    self.sound_button = tk.Button(sound_frame, text=sound_icon,
+                                  ^^^^^^^^^^^
+NameError: name 'sound_frame' is not defined
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.4)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+Audio system initialized successfully
+Loaded 4 music files:
+  1. Njet! 1.mp3
+  2. Njet! 2.mp3
+  3. Njet! 3.mp3
+  4. Njet! 4.mp3
+✓ Loaded SFX: ButtonPress.mp3
+✓ Loaded SFX: ShuffleDeal.mp3
+✓ Loaded SFX: DiscardSelect.mp3
+✓ Loaded SFX: PlayCard.mp3
+Successfully loaded 4/4 custom SFX files
+Could not create tone: sndarray module not available (ModuleNotFoundError: No module named 'numpy')
+Could not create tone: sndarray module not available (ModuleNotFoundError: No module named 'numpy')
+Could not create tone: sndarray module not available (ModuleNotFoundError: No module named 'numpy')
+Could not create tone: sndarray module not available (ModuleNotFoundError: No module named 'numpy')
+Could not create tone: sndarray module not available (ModuleNotFoundError: No module named 'numpy')
+Loaded custom SFX files and generated additional sound effects
+Settings loaded successfully
+🎵 Started playing: Njet! 1.mp3
+♪ button_press
+♪ button_press
+Screen resolution: 2560x1440
+Audio system initialized successfully
+Loaded 4 music files:
+  1. Njet! 1.mp3
+  2. Njet! 2.mp3
+  3. Njet! 3.mp3
+  4. Njet! 4.mp3
+✓ Loaded SFX: ButtonPress.mp3
+✓ Loaded SFX: ShuffleDeal.mp3
+✓ Loaded SFX: DiscardSelect.mp3
+✓ Loaded SFX: PlayCard.mp3
+Successfully loaded 4/4 custom SFX files
+Could not create tone: sndarray module not available (ModuleNotFoundError: No module named 'numpy')
+Could not create tone: sndarray module not available (ModuleNotFoundError: No module named 'numpy')
+Could not create tone: sndarray module not available (ModuleNotFoundError: No module named 'numpy')
+Could not create tone: sndarray module not available (ModuleNotFoundError: No module named 'numpy')
+Could not create tone: sndarray module not available (ModuleNotFoundError: No module named 'numpy')
+Loaded custom SFX files and generated additional sound effects
+Card sprite sheet loaded successfully
+✓ Table background loaded successfully - Original size: (1536, 1024)
+✓ HET board loaded successfully - Original size: (1536, 1024)
+Started new 4-player game
+DEBUG: start_game_with_players called
+DEBUG: Game created, phase: Phase.BLOCKING
+DEBUG: Player 0: Player 1 (Human)
+DEBUG: Player 1: Player 2 (AI)
+DEBUG: Player 2: Player 3 (AI)
+DEBUG: Player 3: Player 4 (AI)
+♪ shuffle_deal
+🎵 Started playing: Njet! 1.mp3
+DEBUG: About to setup UI
+DEBUG: setup_game_ui called - using Canvas approach
+DEBUG: Canvas table background updated: 1920x1080
+DEBUG: About to update display
+DEBUG: update_display called, phase: Phase.BLOCKING, current_player: 0
+DEBUG: Canvas table background updated: 1920x1080
